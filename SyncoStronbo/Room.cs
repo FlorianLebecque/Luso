@@ -24,7 +24,6 @@ namespace SyncoStronbo {
         private void LoadDevicesManager() {
 
             //dynamicaly scan all classes that have the [DevicesTypeManagerAttriburte] to create an instance and manage the devices
-
             var assembly = Assembly.GetExecutingAssembly();
             foreach (Type type in assembly.GetTypes()) {
                 var registerAttribute = type.GetCustomAttribute<DevicesTypeManagerAttriburte>();
