@@ -2,7 +2,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug (emulator-5554)",
+            "name": "Debug 5556",
+            "type": "maui",
+            "request": "launch",
+            "device": "emulator-5556"
+        },
+                {
+            "name": "Debug 5554",
             "type": "maui",
             "request": "launch",
             "device": "emulator-5554"
