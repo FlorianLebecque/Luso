@@ -4,50 +4,62 @@
              x:Class="SyncoStronbo.Features.Rooms.Pages.HostRoomPage"
              Title="Host Room">
 
+    <!-- Navbar actions -->
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="＋" Priority="0" Clicked="OnInviteToolbarClicked"/>
+        <ToolbarItem Text="Kick" Priority="1" Clicked="OnKickToolbarClicked"/>
+        <ToolbarItem Text="✕ Close" Priority="2" Clicked="OnLeaveClicked"/>
+    </ContentPage.ToolbarItems>
+
     <Shell.BackButtonBehavior>
         <BackButtonBehavior IsVisible="False" IsEnabled="False"/>
     </Shell.BackButtonBehavior>
 
-    <Grid RowDefinitions="*,Auto" Padding="24" RowSpacing="16">
-        <VerticalStackLayout Grid.Row="0" Spacing="14" VerticalOptions="Fill" HorizontalOptions="Fill">
-            <Label x:Name="lblRoomName" FontSize="36" FontAttributes="Bold" HorizontalOptions="Center" HorizontalTextAlignment="Center"/>
-            <Label Text="You are the Host" FontSize="Medium" TextColor="Gray" HorizontalOptions="Center"/>
-            <Label x:Name="lblNoGuests" Text="Waiting for guests to join…" TextColor="Gray" FontSize="Medium" HorizontalOptions="Center"/>
+    <Grid RowDefinitions="Auto,Auto,Auto,*"
+          Padding="12,8,12,12"
+          RowSpacing="10">
 
-            <CollectionView x:Name="guestList" SelectionMode="None" MinimumHeightRequest="40">
-                <CollectionView.ItemTemplate>
-                    <DataTemplate>
-                        <Grid ColumnDefinitions="*,Auto,Auto" Padding="8,10" ColumnSpacing="8">
-                            <Label Grid.Column="0" Text="{Binding DisplayName}" FontSize="Medium" VerticalOptions="Center"/>
-                            <Label Grid.Column="1" Text="{Binding PingDisplay}" FontSize="Small" TextColor="Gray" VerticalOptions="Center"/>
-                            <Button Grid.Column="2" Text="Kick" Clicked="OnKickClicked" BackgroundColor="#D35400" TextColor="White" Padding="10,4"/>
-                        </Grid>
-                    </DataTemplate>
-                </CollectionView.ItemTemplate>
-            </CollectionView>
+        <!-- Room name -->
+        <Label x:Name="lblRoomName"
+               Grid.Row="0"
+               FontSize="22" FontAttributes="Bold"
+               HorizontalOptions="Center" HorizontalTextAlignment="Center"/>
 
-            <Label Text="Invite candidates" FontAttributes="Bold" FontSize="16"/>
-            <Label x:Name="lblNoCandidates" Text="No available guests discovered yet." TextColor="Gray" FontSize="Small"/>
 
-            <CollectionView x:Name="candidateList" SelectionMode="None" MinimumHeightRequest="80" MaximumHeightRequest="180">
-                <CollectionView.ItemTemplate>
-                    <DataTemplate>
-                        <Grid ColumnDefinitions="*,Auto" Padding="8,8">
-                            <VerticalStackLayout Grid.Column="0" Spacing="2">
-                                <Label Text="{Binding GuestName}" FontSize="Medium"/>
-                                <Label Text="{Binding GuestIp}" FontSize="Small" TextColor="Gray"/>
-                            </VerticalStackLayout>
-                            <Button Grid.Column="1" Text="Invite" Clicked="OnInviteClicked" BackgroundColor="#2E86DE" TextColor="White" Padding="12,6"/>
-                        </Grid>
-                    </DataTemplate>
-                </CollectionView.ItemTemplate>
-            </CollectionView>
+        <!-- Mode selector: Off | On | Auto -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="8">
+            <Button x:Name="btnModeOff"
+                    Grid.Column="0" Text="Off"
+                    Clicked="OnModeClicked"
+                    BackgroundColor="#444" TextColor="White"
+                    HeightRequest="40" CornerRadius="8"/>
+            <Button x:Name="btnModeOn"
+                    Grid.Column="1" Text="On"
+                    Clicked="OnModeClicked"
+                    BackgroundColor="#444" TextColor="White"
+                    HeightRequest="40" CornerRadius="8"/>
+            <Button x:Name="btnModeAuto"
+                    Grid.Column="2" Text="Auto"
+                    Clicked="OnModeClicked"
+                    BackgroundColor="#444" TextColor="White"
+                    HeightRequest="40" CornerRadius="8"/>
+        </Grid>
 
-            <Label x:Name="lblInviteStatus" FontSize="Small" TextColor="Gray"/>
-
-            <Button x:Name="btnFlash" Text="⚡  Flash" Clicked="OnFlashClicked" FontSize="Large" BackgroundColor="#F5A623" TextColor="White" WidthRequest="220" HeightRequest="60" CornerRadius="30" HorizontalOptions="Center"/>
+        <!-- Frequency panel - visible in On mode only -->
+        <VerticalStackLayout x:Name="sliderPanel"
+                             Grid.Row="2"
+                             IsVisible="False"
+                             Spacing="2">
+            <Label x:Name="lblFrequency"
+                   Text="Frequency: 1.0 Hz"
+                   HorizontalOptions="Center"
+                   FontSize="12" TextColor="Gray"/>
+            <Slider x:Name="frequencySlider"
+                    Minimum="0.5" Maximum="20" Value="1"
+                    ValueChanged="OnFrequencyChanged"/>
         </VerticalStackLayout>
 
-        <Button Grid.Row="1" Text="Close Room" Clicked="OnLeaveClicked" BackgroundColor="#E74C3C" TextColor="White" HeightRequest="50"/>
+        <!-- Dynamic pad grid: host first, then one pad per connected guest -->
+        <Grid x:Name="padGrid" Grid.Row="3" RowSpacing="8" ColumnSpacing="8"/>
     </Grid>
 </ContentPage>

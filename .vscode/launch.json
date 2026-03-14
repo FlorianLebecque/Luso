@@ -12,6 +12,12 @@
             "type": "maui",
             "request": "launch",
             "device": "emulator-5554"
+        },
+        {
+            "name": "Debug physical device",
+            "type": "maui",
+            "request": "launch",
+            "device": "ba6e5519"
         }
     ]
 }

@@ -96,6 +96,14 @@ namespace SyncoStronbo.Features.Rooms.Networking {
             await Task.WhenAll(tasks);
         }
 
+        /// <summary>Sends a FLSH command to a single guest identified by IP.</summary>
+        public async Task FlashGuestAsync(string ip, string action = "on", int leadMs = LeadMs) {
+            if (!_guests.TryGetValue(ip, out var state)) return;
+            long atUnixMs = Now() + leadMs;
+            byte[] bytes  = SspCbor.Flsh(action, atUnixMs);
+            await SendAsync(ip, state, bytes);
+        }
+
         // ── Accept loop ───────────────────────────────────────────────────────
 
         private async Task AcceptLoopAsync(CancellationToken token) {

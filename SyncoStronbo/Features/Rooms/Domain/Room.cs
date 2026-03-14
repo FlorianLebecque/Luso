@@ -74,6 +74,13 @@ namespace SyncoStronbo.Features.Rooms.Domain {
             await _host.FlashAsync(action);
         }
 
+        public async Task FlashGuestAsync(string targetIp, string action = "on") {
+            if (!IsHost || _host is null)
+                throw new InvalidOperationException("Only the room host can trigger a flash.");
+
+            await _host.FlashGuestAsync(targetIp, action);
+        }
+
         public int GuestCount => _host?.GuestCount ?? 0;
 
         public IReadOnlyList<(string Ip, string Name, int RttMs)> GetGuests()
