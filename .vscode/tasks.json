@@ -1,0 +1,84 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "type": "shell",
+      "command": "dotnet build ${workspaceFolder}/SyncoStronbo/SyncoStronbo.csproj -f net8.0-android -c Debug",
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "emulator: start",
+      "type": "shell",
+      "command": "DISPLAY=:1 /opt/android-sdk/emulator/emulator -avd Pixel8 -port 5554 -no-snapshot-load -no-audio -gpu swiftshader_indirect -no-metrics",
+      "isBackground": true,
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": [
+        {
+          "pattern": { "regexp": "^(.*)$", "file": 1, "line": 2, "message": 3 },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "emulator",
+            "endsPattern": "boot completed"
+          }
+        }
+      ]
+    },
+    {
+      "label": "emulator: start multi",
+      "type": "shell",
+      "command": "tmux kill-session -t emulators 2>/dev/null; tmux new-session -d -s emulators -x 220 -y 50 'DISPLAY=:1 /opt/android-sdk/emulator/emulator -avd Pixel8 -port 5554 -no-snapshot-load -no-audio -gpu swiftshader_indirect -no-metrics' && tmux split-window -h -t emulators 'DISPLAY=:1 /opt/android-sdk/emulator/emulator -avd Pixel8b -port 5556 -no-snapshot-load -no-audio -gpu swiftshader_indirect -no-metrics' && tmux attach -t emulators",
+      "isBackground": true,
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": [
+        {
+          "pattern": { "regexp": "^(.*)$", "file": 1, "line": 2, "message": 3 },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "emulator",
+            "endsPattern": "boot completed"
+          }
+        }
+      ]
+    },
+    {
+      "label": "deploy: android device",
+      "type": "shell",
+      "command": "DEVICE=$(adb devices | awk '/\\tdevice$/{print $1; exit}') && echo \"Targeting: $DEVICE\" && dotnet build ${workspaceFolder}/SyncoStronbo/SyncoStronbo.csproj -t:Run -f net8.0-android -c Debug -p:AdbTarget=-s%20$DEVICE -p:AndroidAttachDebugger=true -p:AndroidSdbTargetPort=40993 -p:AndroidSdbHostPort=40993 -p:AndroidSdkDirectory=/opt/android-sdk -p:JavaSdkDirectory=/usr/lib/jvm/java-17-openjdk-amd64 -p:EnableDiagnostics=True -p:EnableMauiXamlDiagnostics=True",
+      "group": "build",
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": [
+        {
+          "pattern": { "regexp": "^(.*)$", "file": 1, "line": 2, "message": 3 },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "Determining projects",
+            "endsPattern": "Starting Debugger|Build succeeded|Build FAILED"
+          }
+        }
+      ]
+    },
+    {
+      "label": "deploy: emulator-5556 (no debug)",
+      "type": "shell",
+      "command": "dotnet build ${workspaceFolder}/SyncoStronbo/SyncoStronbo.csproj -f net8.0-android -c Debug && adb -s emulator-5556 install -r ${workspaceFolder}/SyncoStronbo/bin/Debug/net8.0-android/com.companyname.syncostronbo-Signed.apk && adb -s emulator-5556 shell monkey -p com.companyname.syncostronbo -c android.intent.category.LAUNCHER 1",
+      "group": "build",
+      "isBackground": false,
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "publish: android apk",
+      "type": "shell",
+      "command": "dotnet publish ${workspaceFolder}/SyncoStronbo/SyncoStronbo.csproj -f net8.0-android -c Release -p:AndroidPackageFormats=apk",
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}

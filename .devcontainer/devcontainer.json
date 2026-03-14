@@ -1,0 +1,26 @@
+{
+  "name": "SyncoStronbo Dev Container",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csharp",
+        "ms-dotnettools.dotnet-maui",
+        "caspiantools.caspian-emulator"
+      ]
+    }
+  },
+  "postCreateCommand": "dotnet restore",
+  "containerEnv": {
+    "JAVA_HOME": "/usr/lib/jvm/java-17-openjdk-amd64",
+    "ANDROID_SDK_ROOT": "/opt/android-sdk"
+  },
+  "remoteUser": "root",
+  "runArgs": [
+    "--privileged",
+    "--volume", "/dev/bus/usb:/dev/bus/usb",
+    "--device", "/dev/kvm"
+  ]
+}
