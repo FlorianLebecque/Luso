@@ -252,8 +252,6 @@ namespace SyncoStronbo.Features.Rooms.Networking {
             foreach (var (ip, state) in _guests)
                 _ = SendAsync(ip, state, clos);
 
-            Thread.Sleep(200); // brief flush window
-
             _cts.Cancel();
             _listener.Stop();
             foreach (var (_, state) in _guests) state.Client.Dispose();

@@ -10,6 +10,7 @@ public partial class HomePage : ContentPage
     private readonly string _guestId = GuestIdentity.GetOrCreateGuestId();
     private UdpRoomDiscovery? _inviteDiscovery;
     private bool _isJoiningInvite;
+    private bool _isNavigating;
 
     public HomePage()
     {
@@ -19,6 +20,8 @@ public partial class HomePage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
+        _isNavigating = false;
+        SetNavigationButtonsEnabled(true);
 
         _inviteDiscovery = new UdpRoomDiscovery();
         _inviteDiscovery.OnInviteReceived += OnInviteReceived;
@@ -39,12 +42,40 @@ public partial class HomePage : ContentPage
 
     private async void btnCreateClicked(object sender, EventArgs e)
     {
-        await Shell.Current.GoToAsync("CreateRoom");
+        if (_isNavigating) return;
+        _isNavigating = true;
+        SetNavigationButtonsEnabled(false);
+        try
+        {
+            await Shell.Current.GoToAsync("CreateRoom");
+        }
+        finally
+        {
+            if (Shell.Current.CurrentState?.Location?.OriginalString?.Contains("Home") == true)
+            {
+                _isNavigating = false;
+                SetNavigationButtonsEnabled(true);
+            }
+        }
     }
 
     private async void btnEnterClicked(object sender, EventArgs e)
     {
-        await Shell.Current.GoToAsync("BrowseRooms");
+        if (_isNavigating) return;
+        _isNavigating = true;
+        SetNavigationButtonsEnabled(false);
+        try
+        {
+            await Shell.Current.GoToAsync("BrowseRooms");
+        }
+        finally
+        {
+            if (Shell.Current.CurrentState?.Location?.OriginalString?.Contains("Home") == true)
+            {
+                _isNavigating = false;
+                SetNavigationButtonsEnabled(true);
+            }
+        }
     }
 
     private void OnInviteReceived(object? sender, RoomInvite invite)
@@ -88,5 +119,11 @@ public partial class HomePage : ContentPage
                 _isJoiningInvite = false;
             }
         });
+    }
+
+    private void SetNavigationButtonsEnabled(bool enabled)
+    {
+        btnCreate.IsEnabled = enabled;
+        btnEnter.IsEnabled = enabled;
     }
 }

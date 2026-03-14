@@ -39,7 +39,7 @@ public partial class GuestRoomPage : ContentPage {
 
         MainThread.BeginInvokeOnMainThread(async () => {
             RoomNotifications.Clear();
-            RoomSession.Clear();
+            await RoomSession.ClearAsync();
             await DisplayAlert("Disconnected", "The host has closed the room.", "OK");
             await Shell.Current.GoToAsync("//Home");
         });
@@ -48,7 +48,7 @@ public partial class GuestRoomPage : ContentPage {
     private async void OnLeaveClicked(object sender, EventArgs e) {
         _leavingVoluntarily = true;
         RoomNotifications.Clear();
-        RoomSession.Clear();
+        await RoomSession.ClearAsync();
         await Shell.Current.GoToAsync("//Home");
     }
 
@@ -57,7 +57,7 @@ public partial class GuestRoomPage : ContentPage {
 
         MainThread.BeginInvokeOnMainThread(async () => {
             RoomNotifications.Clear();
-            RoomSession.Clear();
+            await RoomSession.ClearAsync();
             await DisplayAlert("Removed", "You were removed from the room by the host.", "OK");
             await Shell.Current.GoToAsync("//Home");
         });

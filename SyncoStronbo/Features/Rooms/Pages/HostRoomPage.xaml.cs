@@ -167,7 +167,7 @@ public partial class HostRoomPage : ContentPage {
 
     private async void OnLeaveClicked(object sender, EventArgs e) {
         RoomNotifications.Clear();
-        RoomSession.Clear();
+        await RoomSession.ClearAsync();
         await Shell.Current.GoToAsync("//Home");
     }
 

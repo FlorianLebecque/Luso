@@ -9,18 +9,44 @@ namespace SyncoStronbo.Shared.Session
     /// </summary>
     internal static class RoomSession
     {
+        private static readonly object _sync = new();
         public static Room? Current { get; private set; }
 
         public static void Set(Room room)
         {
-            Current?.Dispose();
-            Current = room;
+            Room? previous;
+            lock (_sync)
+            {
+                previous = Current;
+                Current = room;
+            }
+
+            if (previous is not null)
+                _ = Task.Run(previous.Dispose);
         }
 
         public static void Clear()
         {
-            Current?.Dispose();
-            Current = null;
+            Room? previous;
+            lock (_sync)
+            {
+                previous = Current;
+                Current = null;
+            }
+
+            previous?.Dispose();
+        }
+
+        public static Task ClearAsync()
+        {
+            Room? previous;
+            lock (_sync)
+            {
+                previous = Current;
+                Current = null;
+            }
+
+            return previous is null ? Task.CompletedTask : Task.Run(previous.Dispose);
         }
     }
 }
