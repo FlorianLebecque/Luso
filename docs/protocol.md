@@ -5,6 +5,7 @@
 > **Framing (TCP):** CBOR Sequences (RFC 8742) — each message is one self-delimiting CBOR item  
 > **Framing (UDP):** one CBOR item per datagram (naturally self-bounded)  
 > **Current implementation baseline:** v0 — newline-delimited UTF-8 JSON (migration target: SSP/1.0)
+> **Pre-V1 policy:** this specification is mutable; breaking protocol changes are allowed until V1.
 
 ---
 

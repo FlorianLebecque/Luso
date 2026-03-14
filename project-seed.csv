@@ -1,0 +1,12 @@
+Title,Milestone,Labels,Status,Definition of done
+"Stabilize room navigation and close responsiveness","M0 Stabilization","roadmap,phase:0,area:ui,priority:high","Backlog","No duplicate page opens; create/close/leave actions stay responsive under repeated taps."
+"Harden invite workflow reliability","M0 Stabilization","roadmap,phase:0,area:networking,area:protocol,priority:high","Backlog","Invite accept/refuse flows work consistently across two devices; duplicate/inflight invite handling is deterministic."
+"Add protocol diagnostics and error surfacing","M0 Stabilization","roadmap,phase:0,area:protocol,priority:medium","Backlog","Structured logs for core message flow (ANNC, PRES, INVI, JOIN, JACK, JNAK, KICK, CLOS) and visible user errors."
+"Implement capability-based target filtering","M1 Capability Control","roadmap,phase:1,area:ui,area:protocol,priority:high","Backlog","Host can only select/send commands to compatible devices."
+"Extend output adapters (flash/screen/vibration)","M1 Capability Control","roadmap,phase:1,area:networking,priority:high","Backlog","All three output categories execute reliably from Host commands."
+"Implement target groups with persistence","M2 Composition","roadmap,phase:2,area:ui,priority:high","Backlog","Groups can be created/edited/saved and used as command targets."
+"Implement predefined sequence model and playback","M2 Composition","roadmap,phase:2,area:protocol,priority:high","Backlog","Saved ordered effects execute with deterministic timing across guests."
+"Implement rule engine v1","M3 Trigger Engine","roadmap,phase:3,area:protocol,priority:medium","Backlog","Condition-to-action rules can be configured and executed."
+"Integrate FFT/music trigger dispatch","M3 Trigger Engine","roadmap,phase:3,area:audio,area:protocol,priority:medium","Backlog","Audio events can trigger groups/effects with observable execution logs."
+"Implement auth/security baseline for rooms","M4 Hardening","roadmap,phase:4,area:networking,priority:high","Backlog","Room access control is implemented and documented."
+"Export/import show configurations","M4 Hardening","roadmap,phase:4,area:ui,priority:medium","Backlog","Users can save/load reusable show configuration bundles."
