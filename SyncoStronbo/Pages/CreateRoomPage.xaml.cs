@@ -28,7 +28,7 @@ public partial class CreateRoomPage : ContentPage
         {
             var room = Room.Create(name);
             RoomSession.Set(room);
-            await Shell.Current.GoToAsync("RoomPage");
+            await Shell.Current.GoToAsync("HostRoomPage");
         }
         catch (Exception ex)
         {

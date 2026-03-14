@@ -24,6 +24,7 @@ namespace SyncoStronbo
 
         public string RoomId { get; private set; } = string.Empty;
         public string RoomName { get; private set; } = string.Empty;
+        public string HostIp { get; private set; } = string.Empty;
         public bool IsHost { get; private set; }
 
         // ── Events ───────────────────────────────────────────────────────────────
@@ -70,6 +71,7 @@ namespace SyncoStronbo
             {
                 RoomId = Guid.NewGuid().ToString("N")[..8],
                 RoomName = roomName,
+                HostIp = "localhost",
                 IsHost = true
             };
 
@@ -108,6 +110,7 @@ namespace SyncoStronbo
             {
                 RoomId = announcement.RoomId,
                 RoomName = announcement.RoomName,
+                HostIp = announcement.HostIp,
                 IsHost = false
             };
 

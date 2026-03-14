@@ -70,7 +70,7 @@ public partial class BrowseRoomsPage : ContentPage
         {
             var room = await Room.JoinAsync(ann);
             RoomSession.Set(room);
-            await Shell.Current.GoToAsync("RoomPage");
+            await Shell.Current.GoToAsync("GuestRoomPage");
         }
         catch (Exception ex)
         {
