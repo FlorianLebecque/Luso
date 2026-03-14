@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
     openjdk-17-jdk wget unzip curl git ca-certificates \
-    libxcb-cursor0 xvfb tmux \
+    libxcb-cursor0 xvfb tmux libpulse0 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
@@ -27,8 +27,9 @@ RUN cd /tmp \
     "platforms;android-34" \
     "build-tools;34.0.0" \
     "cmdline-tools;11.0" \
-    "emulator" \
     "system-images;android-34;google_apis;x86_64" || true \
+    && ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --sdk_root=${ANDROID_SDK_ROOT} --channel=3 --install \
+    "emulator" || true \
     && yes | ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --sdk_root=${ANDROID_SDK_ROOT} --licenses || true
 
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*

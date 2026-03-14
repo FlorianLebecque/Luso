@@ -55,6 +55,7 @@
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.0" />
 		<PackageReference Include="Microsoft.Maui.Controls" Version="8.0.100" />
 		<PackageReference Include="NAudio" Version="2.2.1" />
+		<PackageReference Include="System.Formats.Cbor" Version="8.0.0" />
 	</ItemGroup>
 
 	<!-- Android -->
@@ -75,10 +76,7 @@
 		<None Include="**\Windows\**\*.cs" Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder)" />
 	</ItemGroup>
 	<ItemGroup>
-	  <MauiXaml Update="Pages\Main.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </MauiXaml>
-	  <MauiXaml Update="Pages\Nav.xaml">
+	  <MauiXaml Update="Features\Home\Pages\HomePage.xaml">
 	    <Generator>MSBuild:Compile</Generator>
 	  </MauiXaml>
 	</ItemGroup>

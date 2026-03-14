@@ -66,7 +66,7 @@
     {
       "label": "deploy: emulator-5556 (no debug)",
       "type": "shell",
-      "command": "dotnet build ${workspaceFolder}/SyncoStronbo/SyncoStronbo.csproj -f net8.0-android -c Debug && adb -s emulator-5556 install -r ${workspaceFolder}/SyncoStronbo/bin/Debug/net8.0-android/com.companyname.syncostronbo-Signed.apk && adb -s emulator-5556 shell monkey -p com.companyname.syncostronbo -c android.intent.category.LAUNCHER 1",
+      "command": "dotnet build ${workspaceFolder}/SyncoStronbo/SyncoStronbo.csproj -f net8.0-android -c Debug -t:PackageForAndroid && adb -s emulator-5556 install -r ${workspaceFolder}/SyncoStronbo/bin/Debug/net8.0-android/com.companyname.syncostronbo-Signed.apk && adb -s emulator-5556 shell monkey -p com.companyname.syncostronbo -c android.intent.category.LAUNCHER 1",
       "group": "build",
       "isBackground": false,
       "presentation": { "reveal": "always", "panel": "dedicated" },
