@@ -2,7 +2,7 @@
 using Microsoft.Maui.Controls.Hosting;
 using Microsoft.Maui.Hosting;
 using Microsoft.Maui.LifecycleEvents;
-using SyncoStronbo.Services;
+using SyncoStronbo.Features.Rooms.Services;
 
 namespace SyncoStronbo {
     public static class MauiProgram {

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="SyncoStronbo.Features.Rooms.Pages.CreateRoomPage"
+             Title="Create Room">
+
+    <VerticalStackLayout Spacing="20" Padding="30" VerticalOptions="Center">
+        <Label Text="Room Name" FontSize="Medium" FontAttributes="Bold"/>
+
+        <Entry x:Name="entryName"
+               Placeholder="e.g. Party Lights"
+               MaxLength="30"
+               ReturnCommand="{Binding Source={x:Reference btnCreate}, Path=Command}"
+               ClearButtonVisibility="WhileEditing"/>
+
+        <Button x:Name="btnCreate"
+                Text="Create &amp; Start"
+                Clicked="OnCreateClicked"
+                FontSize="Medium"
+                HeightRequest="50"/>
+
+        <ActivityIndicator x:Name="spinner"
+                           IsRunning="False"
+                           IsVisible="False"
+                           HorizontalOptions="Center"/>
+
+        <Label x:Name="lblError"
+               TextColor="Red"
+               IsVisible="False"
+               HorizontalOptions="Center"/>
+    </VerticalStackLayout>
+</ContentPage>

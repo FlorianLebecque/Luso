@@ -2,15 +2,12 @@
 <Shell
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-    xmlns:pages="clr-namespace:SyncoStronbo.Pages"
+    xmlns:homePages="clr-namespace:SyncoStronbo.Features.Home.Pages"
     x:Class="SyncoStronbo.AppShell"
     FlyoutBehavior="Disabled">
 
-    <!--
-        Single root page. All other pages (CreateRoomPage, BrowseRoomsPage, RoomPage)
-        are pushed onto the navigation stack via Routing.RegisterRoute in AppShell.xaml.cs.
-    -->
+    <!-- Single root page. Feature pages are registered in AppShell.xaml.cs. -->
     <ShellContent Route="Home"
-                  ContentTemplate="{DataTemplate pages:Main}"/>
+                  ContentTemplate="{DataTemplate homePages:HomePage}"/>
 
 </Shell>
