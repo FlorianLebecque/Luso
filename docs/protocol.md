@@ -464,25 +464,7 @@ sequenceDiagram
 
 ## 7. Implementation notes
 
-### 7.1 Current baseline (v0)
-
-The current codebase (`SocketRoomHost.cs`, `SocketRoomGuest.cs`, `UdpRoomDiscovery.cs`) implements a **v0** protocol:
-
-- Encoding: **UTF-8 JSON** (not CBOR)
-- TCP framing: **newline-delimited** JSON objects
-- UDP: **JSON** datagram
-- Handshake: **none** (guest connects, host tracks IP silently)
-- Capabilities: **not sent**
-
-Migration to SSP/1.0 requires:
-1. Add a CBOR encoder/decoder (e.g. `PeterO.Cbor` NuGet package).
-2. Replace `JsonSerializer` calls with CBOR map construction.
-3. Replace the `StreamReader` + `ReadLineAsync` loop with a streaming CBOR sequence reader.
-4. Add `JOIN` / `JACK` handshake on connect.
-5. Add `cap` map to `JOIN` with device capabilities.
-6. Update UDP sender and receiver similarly.
-
-### 7.2 Interoperability
+### 7.1 Interoperability
 
 Any external device or application implementing SSP/1.0 can:
 - Discover rooms by listening on UDP port 5557 for `ANNC` datagrams.
