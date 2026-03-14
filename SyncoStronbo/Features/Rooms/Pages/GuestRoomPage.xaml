@@ -1,21 +1,63 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:components="clr-namespace:SyncoStronbo.Shared.Components"
              x:Class="SyncoStronbo.Features.Rooms.Pages.GuestRoomPage"
-             Title="Guest Room">
+             Shell.NavBarIsVisible="False">
 
     <Shell.BackButtonBehavior>
         <BackButtonBehavior IsVisible="False" IsEnabled="False"/>
     </Shell.BackButtonBehavior>
 
-    <Grid RowDefinitions="*,Auto" Padding="24" RowSpacing="16">
-        <VerticalStackLayout Grid.Row="0" Spacing="18" VerticalOptions="Center" HorizontalOptions="Center">
-            <Label x:Name="lblRoomName" FontSize="36" FontAttributes="Bold" HorizontalOptions="Center" HorizontalTextAlignment="Center"/>
-            <Label Text="You are connected as Guest" FontSize="Medium" TextColor="Gray" HorizontalOptions="Center"/>
-            <Label x:Name="lblHost" FontSize="Medium" HorizontalOptions="Center"/>
-            <Label x:Name="lblStatus" Text="Connected to host" FontSize="Medium" HorizontalOptions="Center"/>
+    <Grid RowDefinitions="*,Auto,Auto" Padding="24,48,24,0" RowSpacing="0">
+
+        <!-- Center: room name + connection badge + host -->
+        <VerticalStackLayout Grid.Row="0" Spacing="16" VerticalOptions="Center">
+
+            <Label x:Name="lblRoomName"
+                   Style="{StaticResource Title2}"
+                   HorizontalOptions="Center"
+                   HorizontalTextAlignment="Center"/>
+
+            <!-- Connected badge -->
+            <Border BackgroundColor="#1A107C10"
+                    StrokeShape="RoundRectangle 20"
+                    StrokeThickness="1"
+                    Stroke="{StaticResource SemanticSuccess}"
+                    HorizontalOptions="Center"
+                    Padding="14,6">
+                <Label Text="● Connected"
+                       TextColor="{StaticResource SemanticSuccess}"
+                       FontSize="12"
+                       FontAttributes="Bold"/>
+            </Border>
+
+            <Label x:Name="lblHost"
+                   Style="{StaticResource Body1}"
+                   TextColor="{StaticResource DarkTextSecondary}"
+                   HorizontalOptions="Center"
+                   HorizontalTextAlignment="Center"/>
         </VerticalStackLayout>
 
-        <Button Grid.Row="1" Text="Leave Room" Clicked="OnLeaveClicked" BackgroundColor="#E74C3C" TextColor="White" HeightRequest="50"/>
+        <!-- Status line -->
+        <Label x:Name="lblStatus"
+               Grid.Row="1"
+               Style="{StaticResource Caption1}"
+               TextColor="{StaticResource DarkTextSecondary}"
+               HorizontalOptions="Center"
+               Margin="0,0,0,12"/>
+
+        <!-- Bottom action bar -->
+        <components:BottomBarView Grid.Row="2">
+            <Button Text="Leave Room"
+                    Clicked="OnLeaveClicked"
+                    BackgroundColor="{StaticResource SemanticDanger}"
+                    TextColor="White"
+                    FontAttributes="Bold"
+                    FontSize="14"
+                    CornerRadius="10"
+                    HeightRequest="46"
+                    HorizontalOptions="Fill"/>
+        </components:BottomBarView>
     </Grid>
 </ContentPage>

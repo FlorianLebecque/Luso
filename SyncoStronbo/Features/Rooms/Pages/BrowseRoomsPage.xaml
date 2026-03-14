@@ -2,29 +2,85 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="SyncoStronbo.Features.Rooms.Pages.BrowseRoomsPage"
-             Title="Join a Room">
+             Shell.NavBarIsVisible="False">
 
-    <Grid RowDefinitions="Auto,*,Auto" Padding="16" RowSpacing="12">
-        <HorizontalStackLayout Grid.Row="0" Spacing="10" VerticalOptions="Center">
-            <ActivityIndicator x:Name="spinner" IsRunning="True" WidthRequest="24" HeightRequest="24" VerticalOptions="Center"/>
-            <Label x:Name="lblStatus" Text="Scanning for rooms on this network…" VerticalOptions="Center"/>
-        </HorizontalStackLayout>
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="16,48,16,24" RowSpacing="12">
 
-        <CollectionView x:Name="roomsCollection" Grid.Row="1" SelectionMode="Single" SelectionChanged="OnRoomSelected">
+        <!-- Page header -->
+        <Label Grid.Row="0"
+               Text="Nearby Rooms"
+               Style="{StaticResource Title2}"
+               TextColor="White"
+               Margin="4,0,0,4"/>
+
+        <!-- Scan status bar -->
+        <Border Grid.Row="1"
+                BackgroundColor="{StaticResource DarkSurface}"
+                StrokeThickness="0"
+                StrokeShape="RoundRectangle 12"
+                Padding="14,10">
+            <HorizontalStackLayout Spacing="10">
+                <ActivityIndicator x:Name="spinner" IsRunning="True"
+                                   WidthRequest="16" HeightRequest="16"
+                                   VerticalOptions="Center"/>
+                <Label x:Name="lblStatus" Text="Scanning for rooms…"
+                       Style="{StaticResource Caption1}"
+                       TextColor="{StaticResource DarkTextSecondary}"
+                       VerticalOptions="Center"/>
+            </HorizontalStackLayout>
+        </Border>
+
+        <!-- Room list -->
+        <CollectionView x:Name="roomsCollection" Grid.Row="2"
+                        SelectionMode="Single" SelectionChanged="OnRoomSelected">
             <CollectionView.EmptyView>
-                <Label Text="No rooms found yet." HorizontalOptions="Center" VerticalOptions="Center" TextColor="Gray" Margin="0,40,0,0"/>
+                <VerticalStackLayout VerticalOptions="Center" HorizontalOptions="Center"
+                                     Spacing="8" Margin="0,60,0,0">
+                    <Label Text="No rooms found yet"
+                           Style="{StaticResource Subtitle2}"
+                           TextColor="{StaticResource DarkTextSecondary}"
+                           HorizontalOptions="Center"/>
+                    <Label Text="Make sure someone is hosting on the same network"
+                           Style="{StaticResource Caption1}"
+                           TextColor="{StaticResource DarkTextDisabled}"
+                           HorizontalTextAlignment="Center"
+                           HorizontalOptions="Center"/>
+                </VerticalStackLayout>
             </CollectionView.EmptyView>
 
             <CollectionView.ItemTemplate>
                 <DataTemplate>
-                    <Grid Padding="12,16" ColumnDefinitions="*,Auto" BackgroundColor="Transparent">
-                        <Label Grid.Column="0" Text="{Binding RoomName}" FontSize="Large" VerticalOptions="Center"/>
-                        <Label Grid.Column="1" Text="{Binding HostIp}" FontSize="Small" TextColor="Gray" VerticalOptions="Center"/>
-                    </Grid>
+                    <Border Margin="0,0,0,8"
+                            BackgroundColor="{StaticResource DarkSurface}"
+                            StrokeThickness="0"
+                            StrokeShape="RoundRectangle 12"
+                            Padding="16,14">
+                        <Border.Shadow>
+                            <Shadow Brush="Black" Offset="0,2" Radius="4" Opacity="0.28"/>
+                        </Border.Shadow>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout Grid.Column="0" Spacing="3">
+                                <Label Text="{Binding RoomName}"
+                                       Style="{StaticResource Body1Strong}"
+                                       TextColor="White"/>
+                                <Label Text="{Binding HostIp}"
+                                       Style="{StaticResource Caption1}"
+                                       TextColor="{StaticResource DarkTextSecondary}"/>
+                            </VerticalStackLayout>
+                            <Label Grid.Column="1" Text="›" FontSize="22"
+                                   TextColor="{StaticResource DarkTextSecondary}"
+                                   VerticalOptions="Center"/>
+                        </Grid>
+                    </Border>
                 </DataTemplate>
             </CollectionView.ItemTemplate>
         </CollectionView>
 
-        <Button Grid.Row="2" Text="Cancel" Clicked="OnCancelClicked" BackgroundColor="Gray"/>
+        <!-- Cancel -->
+        <Button Grid.Row="3" Text="Cancel" Clicked="OnCancelClicked"
+                BackgroundColor="{StaticResource DarkSurface}"
+                TextColor="{StaticResource DarkTextPrimary}"
+                CornerRadius="12"
+                HeightRequest="48"/>
     </Grid>
 </ContentPage>

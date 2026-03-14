@@ -12,6 +12,9 @@ public partial class CreateRoomPage : ContentPage
         InitializeComponent();
     }
 
+    private async void OnBackClicked(object sender, EventArgs e)
+        => await Shell.Current.GoToAsync("..");
+
     private async void OnCreateClicked(object sender, EventArgs e)
     {
         if (_isCreating) return;

@@ -1,65 +1,138 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:components="clr-namespace:SyncoStronbo.Shared.Components"
              x:Class="SyncoStronbo.Features.Rooms.Pages.HostRoomPage"
-             Title="Host Room">
-
-    <!-- Navbar actions -->
-    <ContentPage.ToolbarItems>
-        <ToolbarItem Text="＋" Priority="0" Clicked="OnInviteToolbarClicked"/>
-        <ToolbarItem Text="Kick" Priority="1" Clicked="OnKickToolbarClicked"/>
-        <ToolbarItem Text="✕ Close" Priority="2" Clicked="OnLeaveClicked"/>
-    </ContentPage.ToolbarItems>
+             Shell.NavBarIsVisible="False">
 
     <Shell.BackButtonBehavior>
         <BackButtonBehavior IsVisible="False" IsEnabled="False"/>
     </Shell.BackButtonBehavior>
 
-    <Grid RowDefinitions="Auto,Auto,Auto,*"
-          Padding="12,8,12,12"
-          RowSpacing="10">
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto"
+          Padding="16,48,16,0"
+          RowSpacing="12">
 
         <!-- Room name -->
         <Label x:Name="lblRoomName"
                Grid.Row="0"
-               FontSize="22" FontAttributes="Bold"
-               HorizontalOptions="Center" HorizontalTextAlignment="Center"/>
+               Style="{StaticResource Title2}"
+               HorizontalOptions="Center"
+               HorizontalTextAlignment="Center"/>
 
+        <!-- Mode selector: animated sliding pill -->
+        <Border x:Name="modeContainer"
+                Grid.Row="1"
+                BackgroundColor="{StaticResource DarkSurface}"
+                StrokeThickness="0"
+                StrokeShape="RoundRectangle 12"
+                Padding="4">
+            <Grid ColumnDefinitions="*,*,*" HeightRequest="42" ColumnSpacing="0">
 
-        <!-- Mode selector: Off | On | Auto -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="8">
-            <Button x:Name="btnModeOff"
-                    Grid.Column="0" Text="Off"
-                    Clicked="OnModeClicked"
-                    BackgroundColor="#444" TextColor="White"
-                    HeightRequest="40" CornerRadius="8"/>
-            <Button x:Name="btnModeOn"
-                    Grid.Column="1" Text="On"
-                    Clicked="OnModeClicked"
-                    BackgroundColor="#444" TextColor="White"
-                    HeightRequest="40" CornerRadius="8"/>
-            <Button x:Name="btnModeAuto"
-                    Grid.Column="2" Text="Auto"
-                    Clicked="OnModeClicked"
-                    BackgroundColor="#444" TextColor="White"
-                    HeightRequest="40" CornerRadius="8"/>
-        </Grid>
+                <!-- Layer 1: sliding pill (stays in col 0, moves via TranslationX) -->
+                <Border x:Name="modePill"
+                        Grid.Column="0"
+                        BackgroundColor="{StaticResource BrandPrimary}"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 8"
+                        HorizontalOptions="Fill"
+                        VerticalOptions="Fill"
+                        InputTransparent="True"/>
 
-        <!-- Frequency panel - visible in On mode only -->
+                <!-- Layer 2: text labels -->
+                <Label x:Name="lblModeOff"
+                       Grid.Column="0" Text="Off"
+                       HorizontalOptions="Center" VerticalOptions="Center"
+                       TextColor="White" FontSize="14"
+                       InputTransparent="True"/>
+                <Label x:Name="lblModeOn"
+                       Grid.Column="1" Text="On"
+                       HorizontalOptions="Center" VerticalOptions="Center"
+                       TextColor="#B3B0AD" FontSize="14"
+                       InputTransparent="True"/>
+                <Label x:Name="lblModeAuto"
+                       Grid.Column="2" Text="Auto"
+                       HorizontalOptions="Center" VerticalOptions="Center"
+                       TextColor="#B3B0AD" FontSize="14"
+                       InputTransparent="True"/>
+
+                <!-- Layer 3: transparent tap targets (named for code-behind) -->
+                <Button x:Name="btnModeOff"
+                        Grid.Column="0"
+                        BackgroundColor="Transparent"
+                        TextColor="Transparent"
+                        Text="Off"
+                        HeightRequest="42"
+                        Clicked="OnModeClicked"/>
+                <Button x:Name="btnModeOn"
+                        Grid.Column="1"
+                        BackgroundColor="Transparent"
+                        TextColor="Transparent"
+                        Text="On"
+                        HeightRequest="42"
+                        Clicked="OnModeClicked"/>
+                <Button x:Name="btnModeAuto"
+                        Grid.Column="2"
+                        BackgroundColor="Transparent"
+                        TextColor="Transparent"
+                        Text="Auto"
+                        HeightRequest="42"
+                        Clicked="OnModeClicked"/>
+            </Grid>
+        </Border>
+
+        <!-- Frequency panel — visible in On mode only -->
         <VerticalStackLayout x:Name="sliderPanel"
                              Grid.Row="2"
                              IsVisible="False"
-                             Spacing="2">
+                             Spacing="4">
             <Label x:Name="lblFrequency"
                    Text="Frequency: 1.0 Hz"
-                   HorizontalOptions="Center"
-                   FontSize="12" TextColor="Gray"/>
+                   Style="{StaticResource Caption1}"
+                   TextColor="{StaticResource DarkTextSecondary}"
+                   HorizontalOptions="Center"/>
             <Slider x:Name="frequencySlider"
                     Minimum="0.5" Maximum="20" Value="1"
                     ValueChanged="OnFrequencyChanged"/>
         </VerticalStackLayout>
 
-        <!-- Dynamic pad grid: host first, then one pad per connected guest -->
-        <Grid x:Name="padGrid" Grid.Row="3" RowSpacing="8" ColumnSpacing="8"/>
+        <!-- Dynamic pad grid -->
+        <Grid x:Name="padGrid" Grid.Row="3" RowSpacing="8" ColumnSpacing="8"
+              VerticalOptions="Fill" HorizontalOptions="Fill"/>
+
+        <!-- Bottom action bar -->
+        <components:BottomBarView Grid.Row="4">
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+
+                <Button Grid.Column="0"
+                        Text="Invite"
+                        Clicked="OnInviteToolbarClicked"
+                        BackgroundColor="{StaticResource BrandPrimary}"
+                        TextColor="White"
+                        FontSize="14"
+                        FontAttributes="Bold"
+                        CornerRadius="10"
+                        HeightRequest="46"/>
+
+                <Button Grid.Column="1"
+                        Text="Kick"
+                        Clicked="OnKickToolbarClicked"
+                        BackgroundColor="{StaticResource DarkSurfaceRaised}"
+                        TextColor="{StaticResource DarkTextPrimary}"
+                        FontSize="14"
+                        CornerRadius="10"
+                        HeightRequest="46"/>
+
+                <Button Grid.Column="2"
+                        Text="Close"
+                        Clicked="OnLeaveClicked"
+                        BackgroundColor="{StaticResource SemanticDanger}"
+                        TextColor="White"
+                        FontSize="14"
+                        FontAttributes="Bold"
+                        CornerRadius="10"
+                        HeightRequest="46"/>
+            </Grid>
+        </components:BottomBarView>
     </Grid>
 </ContentPage>

@@ -33,15 +33,24 @@ public partial class HostRoomPage : ContentPage
 
     // ── Pad ───────────────────────────────────────────────────────────────────
 
+    // Pastel palette — readable on the dark (#1C1C1C) background
     private static readonly Color[] PadColors = {
-        Color.FromArgb("#E74C3C"), Color.FromArgb("#E67E22"),
-        Color.FromArgb("#F1C40F"), Color.FromArgb("#2ECC71"),
-        Color.FromArgb("#1ABC9C"), Color.FromArgb("#3498DB"),
-        Color.FromArgb("#9B59B6"), Color.FromArgb("#E91E63"),
-        Color.FromArgb("#00BCD4"), Color.FromArgb("#FF5722"),
-        Color.FromArgb("#8BC34A"), Color.FromArgb("#FF9800"),
-        Color.FromArgb("#607D8B"), Color.FromArgb("#795548"),
-        Color.FromArgb("#9E9E9E"), Color.FromArgb("#3F51B5"),
+        Color.FromArgb("#F28B82"), // coral
+        Color.FromArgb("#F4A261"), // peach
+        Color.FromArgb("#E9C46A"), // gold
+        Color.FromArgb("#80C9A4"), // mint
+        Color.FromArgb("#74C2E1"), // sky blue
+        Color.FromArgb("#8AB4F8"), // periwinkle
+        Color.FromArgb("#C58AF9"), // lavender
+        Color.FromArgb("#F48FB1"), // pink
+        Color.FromArgb("#7DCFBF"), // teal
+        Color.FromArgb("#F4B183"), // melon
+        Color.FromArgb("#A8D8A8"), // sage green
+        Color.FromArgb("#E0C89A"), // wheat
+        Color.FromArgb("#90C8E8"), // powder blue
+        Color.FromArgb("#D4A0A8"), // dusty rose
+        Color.FromArgb("#A8D0B8"), // mint sage
+        Color.FromArgb("#A0B8D8"), // slate blue
     };
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -132,12 +141,24 @@ public partial class HostRoomPage : ContentPage
 
     private void UpdateModeButtons()
     {
-        const string active   = "#2E86DE";
-        const string inactive = "#444";
+        // Determine target segment (0=Off, 1=On, 2=Auto)
+        int segment = _mode switch {
+            FlashMode.Off  => 0,
+            FlashMode.On   => 1,
+            _              => 2,
+        };
 
-        btnModeOff.BackgroundColor  = Color.FromArgb(_mode == FlashMode.Off  ? active : inactive);
-        btnModeOn.BackgroundColor   = Color.FromArgb(_mode == FlashMode.On   ? active : inactive);
-        btnModeAuto.BackgroundColor = Color.FromArgb(_mode == FlashMode.Auto ? active : inactive);
+        // Pill width = inner container width / 3 (container has 4px padding each side)
+        double innerW = modeContainer.Width > 8 ? modeContainer.Width - 8 : 0;
+        double segW   = innerW / 3.0;
+        _ = modePill.TranslateTo(segment * segW, 0, 220, Easing.CubicOut);
+
+        // Update label colours
+        var active   = Colors.White;
+        var inactive = Color.FromArgb("#B3B0AD");
+        lblModeOff.TextColor  = _mode == FlashMode.Off  ? active : inactive;
+        lblModeOn.TextColor   = _mode == FlashMode.On   ? active : inactive;
+        lblModeAuto.TextColor = _mode == FlashMode.Auto ? active : inactive;
 
         sliderPanel.IsVisible = _mode == FlashMode.On;
     }
@@ -314,13 +335,15 @@ public partial class HostRoomPage : ContentPage
 
             var btn = new Button
             {
-                Text             = label,
-                FontSize         = 11,
-                LineBreakMode    = LineBreakMode.WordWrap,
-                BackgroundColor  = PadColors[i % PadColors.Length],
-                TextColor        = Colors.White,
-                CornerRadius     = 12,
-                CommandParameter = ip,
+                Text              = label,
+                FontSize          = 13,
+                LineBreakMode     = LineBreakMode.WordWrap,
+                BackgroundColor   = PadColors[i % PadColors.Length],
+                TextColor         = Colors.Black,
+                CornerRadius      = 14,
+                CommandParameter  = ip,
+                HorizontalOptions = LayoutOptions.Fill,
+                VerticalOptions   = LayoutOptions.Fill,
             };
             btn.Pressed  += OnPadPressed;
             btn.Released += OnPadReleased;
