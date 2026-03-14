@@ -31,6 +31,7 @@ namespace SyncoStronbo.Features.Rooms.Networking {
 
         public event EventHandler<FlashCommand>? OnFlashCommand;
         public event EventHandler?               OnDisconnected;
+        public event EventHandler?               OnKicked;
 
         private SocketRoomGuest(TcpClient client, RoomAnnouncement room) {
             _client   = client;
@@ -69,8 +70,19 @@ namespace SyncoStronbo.Features.Rooms.Networking {
                       ?? throw new InvalidOperationException("Host closed connection during handshake.");
 
             var msg = SspCbor.ParseMap(raw);
-            if (SspCbor.Tag(msg) != "JACK")
-                throw new InvalidOperationException($"Expected JACK, received '{SspCbor.Tag(msg)}'.");
+            string tag = SspCbor.Tag(msg);
+            if (tag == "JNAK") {
+                string ec  = msg.TryGetValue("ec", out var ecObj) && ecObj is string ecs ? ecs : "UNKNOWN";
+                string txt = msg.TryGetValue("msg", out var mObj) && mObj is string ms ? ms : "Join refused by host.";
+                string pv  = msg.TryGetValue("pv", out var pvObj) && pvObj is string pvs ? pvs : "?";
+                throw new InvalidOperationException($"Join refused ({ec}). {txt} Host protocol: {pv}.");
+            }
+            if (tag != "JACK")
+                throw new InvalidOperationException($"Expected JACK, received '{tag}'.");
+
+            string hostPv = msg.TryGetValue("pv", out var hpvObj) && hpvObj is string hpv ? hpv : string.Empty;
+            if (!string.Equals(hostPv, SspCbor.ProtocolVersion, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Protocol mismatch. Guest uses {SspCbor.ProtocolVersion}, host uses {hostPv}.");
 
             // Start listening loop in the background.
             _ = guest.ListenLoopAsync(reader, guest._cts.Token);
@@ -122,6 +134,10 @@ namespace SyncoStronbo.Features.Rooms.Networking {
 
                 case "CLOS":
                     return true; // signal host-initiated close
+
+                case "KICK":
+                    OnKicked?.Invoke(this, EventArgs.Empty);
+                    return true;
             }
             return false;
         }

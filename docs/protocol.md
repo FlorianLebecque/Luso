@@ -23,7 +23,7 @@ Communication uses two independent channels:
 
 | Channel | Protocol | Port | Purpose |
 |---|---|---|---|
-| Discovery | UDP broadcast | **5557** | Host announces room presence |
+| Discovery | UDP broadcast/unicast | **5557** | Room announcements, guest presence, host invites |
 | Session | TCP (per guest) | **13000** | Bidirectional command stream |
 
 ---
@@ -59,10 +59,11 @@ The receiver uses a streaming CBOR decoder; it reads one item at a time.
 
 ### 3.1 Transport
 
-- **Direction:** Host → LAN broadcast  
-- **Address:** `255.255.255.255:5557`  
-- **Rate:** every 2 000 ms while the room is open  
-- **Guests** listen on `0.0.0.0:5557`
+- **Directions:** Host ↔ Guest over UDP (broadcast for discovery, unicast for invite responses)  
+- **Broadcast address:** `255.255.255.255:5557`  
+- **Host ANNC rate:** every 2 000 ms while the room is open  
+- **Guest PRES rate:** every 3 000 ms while guest is available for invites  
+- **All peers** listen on `0.0.0.0:5557`
 
 ### 3.2 Message: `ANNC` — Room Announcement
 
@@ -128,6 +129,133 @@ sequenceDiagram
     Note over G: Deduplicate by room id.<br/>Display room in browse list.
 ```
 
+### 3.4 Message: `PRES` — Guest Presence
+
+Sent by a Guest to advertise itself as an invite candidate.
+
+| Field | Key | CBOR type | Description |
+|---|---|---|---|
+| Type tag | `t` | text | `"PRES"` |
+| Guest ID | `gid` | text | Stable guest identifier |
+| Guest name | `nm` | text | Human-readable guest device name |
+| Guest IP | `ip` | text | IPv4 address, dotted decimal |
+| Protocol version | `pv` | text | Supported protocol version, e.g. `"1.0"` |
+| Availability | `av` | bool | `true` when ready to receive invites |
+
+```mermaid
+packet
+title PRES — Guest Presence (variable)
++8: "0xa6 CBOR map(6)"
++16: "key: t"
++40: "val: PRES"
++24: "key: gid"
++16: "CBOR text header"
++128: "guest id (variable)"
++24: "key: nm"
++16: "CBOR text header"
++64: "guest name (variable)"
++24: "key: ip"
++16: "CBOR text header"
++88: "guest IPv4 text (variable)"
++24: "key: pv"
++16: "CBOR text header"
++24: "protocol version text"
++24: "key: av"
++8: "bool (0xf4/0xf5)"
+```
+
+### 3.5 Message: `INVI` — Host Invite
+
+Sent by Host (UDP unicast) to a discovered Guest from `PRES`.
+
+| Field | Key | CBOR type | Description |
+|---|---|---|---|
+| Type tag | `t` | text | `"INVI"` |
+| Invite ID | `iid` | text | Unique invite identifier |
+| Room ID | `id` | text | Target room identifier |
+| Room name | `nm` | text | Target room name |
+| Host IP | `ip` | text | Host IPv4 address |
+| TCP port | `pt` | uint | Target room TCP port |
+| Protocol version | `pv` | text | Required protocol version, e.g. `"1.0"` |
+
+```mermaid
+packet
+title INVI — Host Invite (variable)
++8: "0xa7 CBOR map(7)"
++16: "key: t"
++40: "val: INVI"
++24: "key: iid"
++16: "CBOR text header"
++128: "invite id (variable)"
++24: "key: id"
++16: "CBOR text header"
++96: "room id (variable)"
++24: "key: nm"
++16: "CBOR text header"
++64: "room name (variable)"
++24: "key: ip"
++16: "CBOR text header"
++88: "host IPv4 text (variable)"
++24: "key: pt"
++8: "0x19 uint16"
++16: "tcp port"
++24: "key: pv"
++16: "CBOR text header"
++24: "protocol version text"
+```
+
+### 3.6 Message: `INVR` — Invite Response (refuse)
+
+Sent by Guest (UDP unicast) when invite is refused.
+
+| Field | Key | CBOR type | Description |
+|---|---|---|---|
+| Type tag | `t` | text | `"INVR"` |
+| Invite ID | `iid` | text | Invite identifier being answered |
+| Guest ID | `gid` | text | Refusing guest identifier |
+| Reason | `rsn` | text | Optional refusal reason (`"busy"`, `"user_refused"`, `"version"`) |
+
+```mermaid
+packet
+title INVR — Invite Refusal (variable)
++8: "0xa4 CBOR map(4)"
++16: "key: t"
++40: "val: INVR"
++24: "key: iid"
++16: "CBOR text header"
++128: "invite id (variable)"
++24: "key: gid"
++16: "CBOR text header"
++128: "guest id (variable)"
++24: "key: rsn"
++16: "CBOR text header"
++64: "reason text (variable)"
+```
+
+### 3.7 Sequence — Invite to join or refuse
+
+```mermaid
+sequenceDiagram
+    participant G as Guest (available)
+    participant LAN as LAN UDP :5557
+    participant H as Host
+
+    loop every 3 s while available
+        G->>LAN: PRES {gid, nm, ip, pv, av=true}
+    end
+
+    LAN-->>H: PRES received
+    Note over H: Show as invite candidate
+
+    H->>G: INVI {iid, id, nm, ip, pt, pv}
+    alt guest accepts
+        G->>H: TCP connect to ip:pt
+        Note over G,H: JOIN/JACK negotiation continues on TCP
+    else guest refuses
+        G->>H: INVR {iid, gid, rsn}
+    end
+```
+
 ---
 
 ## 4. Session Protocol (TCP)
@@ -145,9 +273,11 @@ sequenceDiagram
 |---|---|---|
 | `JOIN` | G → H | Guest join request (capabilities) |
 | `JACK` | H → G | Join acknowledged |
+| `JNAK` | H → G | Join refused (including protocol mismatch) |
 | `PING` | H → G | Heartbeat probe |
 | `PONG` | G → H | Heartbeat reply |
 | `FLSH` | H → G | Scheduled flash/effect command |
+| `KICK` | H → G | Host forcibly removes one guest |
 | `CLOS` | H → G | Host closing room (graceful) |
 | `LEAV` | G → H | Guest leaving voluntarily (graceful) |
 
@@ -162,15 +292,19 @@ Sent by the Guest **immediately after TCP connect**, before any other message.
 | Field | Key | CBOR type | Description |
 |---|---|---|---|
 | Type tag | `t` | text | `"JOIN"` |
+| Protocol version | `pv` | text | Guest protocol version, e.g. `"1.0"` |
 | Device name | `nm` | text | Human-readable guest device name |
 | Capabilities | `cap` | map | See §4.4 |
 
 ```mermaid
 packet
 title JOIN — Guest join request (variable)
-+8: "0xa3 CBOR map(3)"
++8: "0xa4 CBOR map(4)"
 +16: "key: t"
 +40: "val: JOIN"
++24: "key: pv"
++16: "CBOR text header"
++24: "version text (e.g. 1.0)"
 +24: "key: nm"
 +16: "CBOR text header"
 +64: "Device name (variable)"
@@ -190,15 +324,19 @@ Sent by the Host in reply to a valid `JOIN`.
 | Field | Key | CBOR type | Description |
 |---|---|---|---|
 | Type tag | `t` | text | `"JACK"` |
+| Protocol version | `pv` | text | Host protocol version, e.g. `"1.0"` |
 | Room name | `nm` | text | Confirmed room name |
 | Room ID | `id` | text | Confirmed room ID |
 
 ```mermaid
 packet
 title JACK — Join acknowledged (variable)
-+8: "0xa3 CBOR map(3)"
++8: "0xa4 CBOR map(4)"
 +16: "key: t"
 +40: "val: JACK"
++24: "key: pv"
++16: "CBOR text header"
++24: "version text (e.g. 1.0)"
 +24: "key: nm"
 +16: "CBOR text header"
 +64: "Room name (variable)"
@@ -207,7 +345,41 @@ title JACK — Join acknowledged (variable)
 +288: "Room ID (36 B, UUID)"
 ```
 
-> If the Host does not send `JACK` within 5 000 ms, the Guest MUST close the connection and report a join failure.
+#### `JNAK` — Join refused
+
+Sent by Host when JOIN is invalid or unsupported.
+
+| Field | Key | CBOR type | Description |
+|---|---|---|---|
+| Type tag | `t` | text | `"JNAK"` |
+| Error code | `ec` | text | `"PROTOCOL_MISMATCH"`, `"ROOM_CLOSED"`, `"AUTH_FAILED"` |
+| Message | `msg` | text | Human-readable reason |
+| Host protocol version | `pv` | text | Host protocol version |
+
+```mermaid
+packet
+title JNAK — Join refused (variable)
++8: "0xa4 CBOR map(4)"
++16: "key: t"
++40: "val: JNAK"
++24: "key: ec"
++16: "CBOR text header"
++160: "error code text (variable)"
++24: "key: msg"
++16: "CBOR text header"
++128: "message text (variable)"
++24: "key: pv"
++16: "CBOR text header"
++24: "host protocol version"
+```
+
+Protocol negotiation rule:
+- Guest sends `JOIN.pv`.
+- Host compares against its own supported version.
+- If versions are equal, Host returns `JACK.pv` with same version.
+- If versions differ, Host MUST return `JNAK` with `ec = "PROTOCOL_MISMATCH"` and close the connection.
+
+> If the Host does not send `JACK` or `JNAK` within 5 000 ms, the Guest MUST close the connection and report a join failure.
 
 ### 4.4 Capabilities map (`cap`)
 
@@ -327,7 +499,28 @@ title FLSH — Scheduled effect command (~26 B, variable)
 
 ---
 
-### 4.7 Graceful disconnect
+### 4.7 Disconnect control
+
+#### `KICK` — Host forcibly removes one guest
+
+Sent by the Host to a specific Guest to force immediate removal from the room.
+Guest receiving `KICK` MUST stop session processing, show a "removed by host" message, and navigate away.
+
+| Field | Key | CBOR type | Description |
+|---|---|---|---|
+| Type tag | `t` | text | `"KICK"` |
+| Reason | `rsn` | text | Optional reason, default `"removed_by_host"` |
+
+```mermaid
+packet
+title KICK — Host removes one guest (variable)
++8: "0xa2 CBOR map(2)"
++16: "key: t"
++40: "val: KICK"
++24: "key: rsn"
++16: "CBOR text header"
++128: "reason text (variable)"
+```
 
 #### `CLOS` — Host closes room
 
@@ -377,22 +570,32 @@ sequenceDiagram
     Note over H: Room open, UDP announcing
 
     G->>H: TCP connect
-    G->>H: JOIN {nm, cap}
-    H->>G: JACK {nm, id}
-    Note over G: Session active
-
-    loop every 2 s
-        H->>G: PING {ms}
-        G->>H: PONG {ms}
-        Note over H: RTT = now − ms
+    G->>H: JOIN {pv, nm, cap}
+    alt version matches
+        H->>G: JACK {pv, nm, id}
+        Note over G: Session active
+    else version mismatch
+        H->>G: JNAK {ec=PROTOCOL_MISMATCH, pv}
+        Note over G: Join refused
     end
 
-    H-->>G: FLSH {ac, at}
-    Note over G: Execute effect at `at`
+    opt if joined
+        loop every 2 s
+            H->>G: PING {ms}
+            G->>H: PONG {ms}
+            Note over H: RTT = now − ms
+        end
 
-    G->>H: LEAV
-    Note over H: Guest slot removed
-    Note over G: Navigate to home
+        H-->>G: FLSH {ac, at}
+        Note over G: Execute effect at `at`
+
+        H->>G: KICK {rsn} (optional, targeted)
+        Note over G: Show "removed by host" and leave
+
+        G->>H: LEAV
+        Note over H: Guest slot removed
+        Note over G: Navigate to home
+    end
 ```
 
 ### 5.2 Host closes room
@@ -457,7 +660,7 @@ sequenceDiagram
 
 | Port | Protocol | Direction | Usage |
 |---|---|---|---|
-| 5557 | UDP | Host → broadcast | Room discovery |
+| 5557 | UDP | Host ↔ Guest | Room discovery, guest presence, invites, invite refusal |
 | 13000 | TCP | Host (listener) | Session per guest |
 
 ---
@@ -470,6 +673,7 @@ Any external device or application implementing SSP/1.0 can:
 - Discover rooms by listening on UDP port 5557 for `ANNC` datagrams.
 - Join any room by opening a TCP connection to the announced IP:port and sending a `JOIN` message.
 - Receive and execute `FLSH` commands based on local `at` timestamp.
+- Handle host disconnect controls (`KICK` for targeted removal, `CLOS` for room shutdown).
 
 The protocol is intentionally **platform-agnostic**: it requires only a UDP socket, a TCP socket, and a CBOR encoder/decoder.
 
@@ -486,4 +690,3 @@ The protocol is intentionally **platform-agnostic**: it requires only a UDP sock
 | Room authentication | PIN or token in `JOIN` for private rooms |
 | Guest groups | Subset targeting within a room |
 | Error message | `ERRO` type with code + description |
-| Protocol version negotiation | Version field in `JOIN` / `JACK` |

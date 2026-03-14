@@ -9,7 +9,7 @@
     </Shell.BackButtonBehavior>
 
     <Grid RowDefinitions="*,Auto" Padding="24" RowSpacing="16">
-        <VerticalStackLayout Grid.Row="0" Spacing="18" VerticalOptions="Center" HorizontalOptions="Fill">
+        <VerticalStackLayout Grid.Row="0" Spacing="14" VerticalOptions="Fill" HorizontalOptions="Fill">
             <Label x:Name="lblRoomName" FontSize="36" FontAttributes="Bold" HorizontalOptions="Center" HorizontalTextAlignment="Center"/>
             <Label Text="You are the Host" FontSize="Medium" TextColor="Gray" HorizontalOptions="Center"/>
             <Label x:Name="lblNoGuests" Text="Waiting for guests to join…" TextColor="Gray" FontSize="Medium" HorizontalOptions="Center"/>
@@ -17,13 +17,33 @@
             <CollectionView x:Name="guestList" SelectionMode="None" MinimumHeightRequest="40">
                 <CollectionView.ItemTemplate>
                     <DataTemplate>
-                        <Grid ColumnDefinitions="*,Auto" Padding="8,10">
-                            <Label Grid.Column="0" Text="{Binding Ip}" FontSize="Medium" VerticalOptions="Center"/>
+                        <Grid ColumnDefinitions="*,Auto,Auto" Padding="8,10" ColumnSpacing="8">
+                            <Label Grid.Column="0" Text="{Binding DisplayName}" FontSize="Medium" VerticalOptions="Center"/>
                             <Label Grid.Column="1" Text="{Binding PingDisplay}" FontSize="Small" TextColor="Gray" VerticalOptions="Center"/>
+                            <Button Grid.Column="2" Text="Kick" Clicked="OnKickClicked" BackgroundColor="#D35400" TextColor="White" Padding="10,4"/>
                         </Grid>
                     </DataTemplate>
                 </CollectionView.ItemTemplate>
             </CollectionView>
+
+            <Label Text="Invite candidates" FontAttributes="Bold" FontSize="16"/>
+            <Label x:Name="lblNoCandidates" Text="No available guests discovered yet." TextColor="Gray" FontSize="Small"/>
+
+            <CollectionView x:Name="candidateList" SelectionMode="None" MinimumHeightRequest="80" MaximumHeightRequest="180">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid ColumnDefinitions="*,Auto" Padding="8,8">
+                            <VerticalStackLayout Grid.Column="0" Spacing="2">
+                                <Label Text="{Binding GuestName}" FontSize="Medium"/>
+                                <Label Text="{Binding GuestIp}" FontSize="Small" TextColor="Gray"/>
+                            </VerticalStackLayout>
+                            <Button Grid.Column="1" Text="Invite" Clicked="OnInviteClicked" BackgroundColor="#2E86DE" TextColor="White" Padding="12,6"/>
+                        </Grid>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+
+            <Label x:Name="lblInviteStatus" FontSize="Small" TextColor="Gray"/>
 
             <Button x:Name="btnFlash" Text="⚡  Flash" Clicked="OnFlashClicked" FontSize="Large" BackgroundColor="#F5A623" TextColor="White" WidthRequest="220" HeightRequest="60" CornerRadius="30" HorizontalOptions="Center"/>
         </VerticalStackLayout>

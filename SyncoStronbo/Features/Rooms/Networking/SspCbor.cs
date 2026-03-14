@@ -11,6 +11,7 @@ namespace SyncoStronbo.Features.Rooms.Networking {
     /// All messages start with key "t" carrying a 4-char ASCII type tag.
     /// </summary>
     internal static class SspCbor {
+        public const string ProtocolVersion = "1.0";
 
         // ── Message builders ──────────────────────────────────────────────────
 
@@ -30,8 +31,9 @@ namespace SyncoStronbo.Features.Rooms.Networking {
         /// <summary>JOIN — Guest join request with capabilities (G→H).</summary>
         public static byte[] Join(string deviceName, GuestCapabilities cap) {
             var w = new CborWriter();
-            w.WriteStartMap(3);
+            w.WriteStartMap(4);
             w.WriteTextString("t");   w.WriteTextString("JOIN");
+            w.WriteTextString("pv");  w.WriteTextString(ProtocolVersion);
             w.WriteTextString("nm");  w.WriteTextString(deviceName);
             w.WriteTextString("cap"); WriteCap(w, cap);
             w.WriteEndMap();
@@ -41,10 +43,60 @@ namespace SyncoStronbo.Features.Rooms.Networking {
         /// <summary>JACK — Join acknowledged (H→G).</summary>
         public static byte[] Jack(string roomName, string roomId) {
             var w = new CborWriter();
-            w.WriteStartMap(3);
+            w.WriteStartMap(4);
             w.WriteTextString("t");  w.WriteTextString("JACK");
+            w.WriteTextString("pv"); w.WriteTextString(ProtocolVersion);
             w.WriteTextString("nm"); w.WriteTextString(roomName);
             w.WriteTextString("id"); w.WriteTextString(roomId);
+            w.WriteEndMap();
+            return w.Encode();
+        }
+
+        public static byte[] Jnak(string errorCode, string message) {
+            var w = new CborWriter();
+            w.WriteStartMap(4);
+            w.WriteTextString("t");   w.WriteTextString("JNAK");
+            w.WriteTextString("ec");  w.WriteTextString(errorCode);
+            w.WriteTextString("msg"); w.WriteTextString(message);
+            w.WriteTextString("pv");  w.WriteTextString(ProtocolVersion);
+            w.WriteEndMap();
+            return w.Encode();
+        }
+
+        public static byte[] Pres(string guestId, string guestName, string guestIp, bool available = true) {
+            var w = new CborWriter();
+            w.WriteStartMap(6);
+            w.WriteTextString("t");   w.WriteTextString("PRES");
+            w.WriteTextString("gid"); w.WriteTextString(guestId);
+            w.WriteTextString("nm");  w.WriteTextString(guestName);
+            w.WriteTextString("ip");  w.WriteTextString(guestIp);
+            w.WriteTextString("pv");  w.WriteTextString(ProtocolVersion);
+            w.WriteTextString("av");  w.WriteBoolean(available);
+            w.WriteEndMap();
+            return w.Encode();
+        }
+
+        public static byte[] Invi(string inviteId, string roomId, string roomName, string hostIp, int tcpPort) {
+            var w = new CborWriter();
+            w.WriteStartMap(7);
+            w.WriteTextString("t");   w.WriteTextString("INVI");
+            w.WriteTextString("iid"); w.WriteTextString(inviteId);
+            w.WriteTextString("id");  w.WriteTextString(roomId);
+            w.WriteTextString("nm");  w.WriteTextString(roomName);
+            w.WriteTextString("ip");  w.WriteTextString(hostIp);
+            w.WriteTextString("pt");  w.WriteUInt32((uint)tcpPort);
+            w.WriteTextString("pv");  w.WriteTextString(ProtocolVersion);
+            w.WriteEndMap();
+            return w.Encode();
+        }
+
+        public static byte[] Invr(string inviteId, string guestId, string reason) {
+            var w = new CborWriter();
+            w.WriteStartMap(4);
+            w.WriteTextString("t");   w.WriteTextString("INVR");
+            w.WriteTextString("iid"); w.WriteTextString(inviteId);
+            w.WriteTextString("gid"); w.WriteTextString(guestId);
+            w.WriteTextString("rsn"); w.WriteTextString(reason);
             w.WriteEndMap();
             return w.Encode();
         }
@@ -85,6 +137,16 @@ namespace SyncoStronbo.Features.Rooms.Networking {
             var w = new CborWriter();
             w.WriteStartMap(1);
             w.WriteTextString("t"); w.WriteTextString("CLOS");
+            w.WriteEndMap();
+            return w.Encode();
+        }
+
+        /// <summary>KICK — Host forcibly disconnects a specific guest (H→G one guest).</summary>
+        public static byte[] Kick(string reason = "removed_by_host") {
+            var w = new CborWriter();
+            w.WriteStartMap(2);
+            w.WriteTextString("t");   w.WriteTextString("KICK");
+            w.WriteTextString("rsn"); w.WriteTextString(reason);
             w.WriteEndMap();
             return w.Encode();
         }

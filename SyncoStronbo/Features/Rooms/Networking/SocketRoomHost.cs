@@ -74,6 +74,15 @@ namespace SyncoStronbo.Features.Rooms.Networking {
             return list;
         }
 
+        public async Task<bool> KickGuestAsync(string ip, string reason = "removed_by_host") {
+            if (!_guests.TryGetValue(ip, out var state))
+                return false;
+
+            await SendAsync(ip, state, SspCbor.Kick(reason));
+            RemoveGuest(ip, state);
+            return true;
+        }
+
         /// <summary>Broadcasts a FLSH command to all connected guests.</summary>
         public async Task FlashAsync(string action = "on", int leadMs = LeadMs) {
             long atUnixMs = Now() + leadMs;
@@ -122,6 +131,14 @@ namespace SyncoStronbo.Features.Rooms.Networking {
 
                 var msg  = SspCbor.ParseMap(raw.Value);
                 if (SspCbor.Tag(msg) != "JOIN") { client.Dispose(); return; }
+
+                string guestPv = msg.TryGetValue("pv", out var pvObj) && pvObj is string pv ? pv : string.Empty;
+                if (!string.Equals(guestPv, SspCbor.ProtocolVersion, StringComparison.Ordinal)) {
+                    byte[] jnak = SspCbor.Jnak("PROTOCOL_MISMATCH", $"Host uses {SspCbor.ProtocolVersion}, guest uses {guestPv}");
+                    await stream.WriteAsync(jnak, token);
+                    client.Dispose();
+                    return;
+                }
 
                 string            guestName = msg.TryGetValue("nm", out var nm) && nm is string s ? s : ip;
                 GuestCapabilities cap       = SspCbor.ParseCap(msg.TryGetValue("cap", out var c) ? c : null);

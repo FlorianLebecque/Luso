@@ -22,12 +22,16 @@ public partial class GuestRoomPage : ContentPage {
         lblHost.Text = $"Host: {room.HostIp}";
 
         room.OnHostDisconnected += OnHostDisconnected;
+        room.OnKicked += OnKicked;
         RoomNotifications.SetGuestStatus(room.RoomName, room.HostIp);
     }
 
     protected override void OnDisappearing() {
         base.OnDisappearing();
-        if (RoomSession.Current is { } room) room.OnHostDisconnected -= OnHostDisconnected;
+        if (RoomSession.Current is { } room) {
+            room.OnHostDisconnected -= OnHostDisconnected;
+            room.OnKicked -= OnKicked;
+        }
     }
 
     private void OnHostDisconnected(object? sender, EventArgs e) {
@@ -46,5 +50,16 @@ public partial class GuestRoomPage : ContentPage {
         RoomNotifications.Clear();
         RoomSession.Clear();
         await Shell.Current.GoToAsync("//Home");
+    }
+
+    private void OnKicked(object? sender, EventArgs e) {
+        if (_leavingVoluntarily) return;
+
+        MainThread.BeginInvokeOnMainThread(async () => {
+            RoomNotifications.Clear();
+            RoomSession.Clear();
+            await DisplayAlert("Removed", "You were removed from the room by the host.", "OK");
+            await Shell.Current.GoToAsync("//Home");
+        });
     }
 }

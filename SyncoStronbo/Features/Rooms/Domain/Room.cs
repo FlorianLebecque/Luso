@@ -14,6 +14,7 @@ namespace SyncoStronbo.Features.Rooms.Domain {
         public event EventHandler<GuestPingArgs>?   OnGuestPingUpdated;
         public event EventHandler<RoomAnnouncement>? OnRoomDiscovered;
         public event EventHandler?                  OnHostDisconnected;
+        public event EventHandler?                  OnKicked;
 
         private SocketRoomHost? _host;
         private SocketRoomGuest? _guest;
@@ -62,6 +63,7 @@ namespace SyncoStronbo.Features.Rooms.Domain {
                 DetectCapabilities());
             room._guest.OnFlashCommand += (s, cmd) => room.OnFlashCommand?.Invoke(room, cmd);
             room._guest.OnDisconnected += (s, e)   => room.OnHostDisconnected?.Invoke(room, e);
+            room._guest.OnKicked += (s, e)         => room.OnKicked?.Invoke(room, e);
             return room;
         }
 
@@ -76,6 +78,13 @@ namespace SyncoStronbo.Features.Rooms.Domain {
 
         public IReadOnlyList<(string Ip, string Name, int RttMs)> GetGuests()
             => _host?.GetGuests() ?? Array.Empty<(string, string, int)>();
+
+        public async Task<bool> KickGuestAsync(string ip) {
+            if (!IsHost || _host is null)
+                throw new InvalidOperationException("Only the room host can kick guests.");
+
+            return await _host.KickGuestAsync(ip);
+        }
 
         private static GuestCapabilities DetectCapabilities() => new(
             HasFlashlight: true,
