@@ -7,6 +7,10 @@ namespace SyncoStronbo.Features.Rooms.Domain {
         private int _rttMs = -1;
 
         public string Ip { get; init; } = string.Empty;
+        public string Name { get; init; } = string.Empty;
+        public GuestCapabilities Capabilities { get; init; } = GuestCapabilities.Unknown;
+
+        public string DisplayName => string.IsNullOrEmpty(Name) ? Ip : Name;
 
         public int RttMs {
             get => _rttMs;
@@ -21,3 +25,4 @@ namespace SyncoStronbo.Features.Rooms.Domain {
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 }
+

@@ -27,8 +27,10 @@ public partial class HostRoomPage : ContentPage {
         room.OnGuestDisconnected += OnGuestDisconnected;
         room.OnGuestPingUpdated += OnGuestPingUpdated;
 
-        foreach (var (ip, rtt) in room.GetGuests())
-            GetOrAdd(ip).RttMs = rtt;
+        foreach (var (ip, name, rtt) in room.GetGuests()) {
+            var info = GetOrAdd(ip, name);
+            info.RttMs = rtt;
+        }
 
         RefreshNoGuestsLabel();
         RoomNotifications.SetHostStatus(room.RoomName, _guestInfos.Count);
@@ -45,9 +47,9 @@ public partial class HostRoomPage : ContentPage {
         _guestInfos.Clear();
     }
 
-    private void OnGuestConnected(object? sender, string ip) {
+    private void OnGuestConnected(object? sender, GuestJoinedArgs args) {
         MainThread.BeginInvokeOnMainThread(() => {
-            GetOrAdd(ip);
+            GetOrAdd(args.Ip, args.Name);
             RefreshNoGuestsLabel();
             if (RoomSession.Current is { } room) RoomNotifications.SetHostStatus(room.RoomName, _guestInfos.Count);
         });
@@ -66,10 +68,10 @@ public partial class HostRoomPage : ContentPage {
         MainThread.BeginInvokeOnMainThread(() => GetOrAdd(args.Ip).RttMs = args.RttMs);
     }
 
-    private GuestInfo GetOrAdd(string ip) {
+    private GuestInfo GetOrAdd(string ip, string name = "") {
         var g = _guestInfos.FirstOrDefault(x => x.Ip == ip);
         if (g is not null) return g;
-        var info = new GuestInfo { Ip = ip };
+        var info = new GuestInfo { Ip = ip, Name = name };
         _guestInfos.Add(info);
         return info;
     }

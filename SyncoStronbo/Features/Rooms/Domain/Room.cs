@@ -8,12 +8,12 @@ namespace SyncoStronbo.Features.Rooms.Domain {
         public string HostIp { get; private set; } = string.Empty;
         public bool IsHost { get; private set; }
 
-        public event EventHandler<FlashCommand>? OnFlashCommand;
-        public event EventHandler<string>? OnGuestConnected;
-        public event EventHandler<string>? OnGuestDisconnected;
-        public event EventHandler<GuestPingArgs>? OnGuestPingUpdated;
+        public event EventHandler<FlashCommand>?    OnFlashCommand;
+        public event EventHandler<GuestJoinedArgs>? OnGuestConnected;
+        public event EventHandler<string>?          OnGuestDisconnected;
+        public event EventHandler<GuestPingArgs>?   OnGuestPingUpdated;
         public event EventHandler<RoomAnnouncement>? OnRoomDiscovered;
-        public event EventHandler? OnHostDisconnected;
+        public event EventHandler?                  OnHostDisconnected;
 
         private SocketRoomHost? _host;
         private SocketRoomGuest? _guest;
@@ -30,10 +30,10 @@ namespace SyncoStronbo.Features.Rooms.Domain {
             };
 
             room._host = new SocketRoomHost(roomName, room.RoomId);
-            room._host.OnGuestConnected += (s, ip) => room.OnGuestConnected?.Invoke(room, ip);
-            room._host.OnGuestDisconnected += (s, ip) => room.OnGuestDisconnected?.Invoke(room, ip);
-            room._host.OnGuestPingUpdated += (s, arg) => room.OnGuestPingUpdated?.Invoke(room, arg);
-            room._host.OnFlashScheduled += (s, cmd) => room.OnFlashCommand?.Invoke(room, cmd);
+            room._host.OnGuestConnected    += (s, args) => room.OnGuestConnected?.Invoke(room, args);
+            room._host.OnGuestDisconnected  += (s, ip)   => room.OnGuestDisconnected?.Invoke(room, ip);
+            room._host.OnGuestPingUpdated   += (s, arg)  => room.OnGuestPingUpdated?.Invoke(room, arg);
+            room._host.OnFlashScheduled     += (s, cmd)  => room.OnFlashCommand?.Invoke(room, cmd);
 
             room._discovery = new UdpRoomDiscovery();
             room._discovery.StartAnnouncing(roomName, room.RoomId, SocketRoomHost.TcpPort);
@@ -56,9 +56,12 @@ namespace SyncoStronbo.Features.Rooms.Domain {
                 IsHost = false
             };
 
-            room._guest = await SocketRoomGuest.ConnectAsync(announcement);
+            room._guest = await SocketRoomGuest.ConnectAsync(
+                announcement,
+                Microsoft.Maui.Devices.DeviceInfo.Current.Name,
+                DetectCapabilities());
             room._guest.OnFlashCommand += (s, cmd) => room.OnFlashCommand?.Invoke(room, cmd);
-            room._guest.OnDisconnected += (s, e) => room.OnHostDisconnected?.Invoke(room, e);
+            room._guest.OnDisconnected += (s, e)   => room.OnHostDisconnected?.Invoke(room, e);
             return room;
         }
 
@@ -71,8 +74,16 @@ namespace SyncoStronbo.Features.Rooms.Domain {
 
         public int GuestCount => _host?.GuestCount ?? 0;
 
-        public IReadOnlyList<(string Ip, int RttMs)> GetGuests()
-            => _host?.GetGuests() ?? Array.Empty<(string, int)>();
+        public IReadOnlyList<(string Ip, string Name, int RttMs)> GetGuests()
+            => _host?.GetGuests() ?? Array.Empty<(string, string, int)>();
+
+        private static GuestCapabilities DetectCapabilities() => new(
+            HasFlashlight: true,
+            HasVibration:  true,
+            HasScreen:     true,
+            ScreenWidth:   (int)Microsoft.Maui.Devices.DeviceDisplay.Current.MainDisplayInfo.Width,
+            ScreenHeight:  (int)Microsoft.Maui.Devices.DeviceDisplay.Current.MainDisplayInfo.Height
+        );
 
         public void Dispose() {
             _host?.Dispose();

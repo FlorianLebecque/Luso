@@ -2,9 +2,13 @@
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
-using System.Text.Json;
 
 namespace SyncoStronbo.Features.Rooms.Networking {
+    /// <summary>
+    /// SSP/1.0 §3 — UDP broadcast discovery.
+    /// Host sends ANNC datagrams every 2 s; Guests listen and raise OnRoomDiscovered.
+    /// Encoding: CBOR (RFC 7049), one item per datagram.
+    /// </summary>
     internal sealed class UdpRoomDiscovery : IDisposable {
         public const int UdpPort = 5557;
 
@@ -19,16 +23,11 @@ namespace SyncoStronbo.Features.Rooms.Networking {
             StopAnnouncing();
 
             _announceCts = new CancellationTokenSource();
-            var token = _announceCts.Token;
+            var token    = _announceCts.Token;
             string hostIp = GetLocalIpAddress();
 
-            var payload = JsonSerializer.SerializeToUtf8Bytes(new {
-                Type = "ANNOUNCE",
-                RoomId = roomId,
-                RoomName = roomName,
-                TcpPort = tcpPort,
-                HostIp = hostIp
-            });
+            // Build CBOR ANNC payload once (fields do not change during announcement).
+            byte[] payload = SspCbor.Annc(roomId, roomName, hostIp, tcpPort);
 
             _broadcaster = new UdpClient { EnableBroadcast = true };
             var endpoint = new IPEndPoint(IPAddress.Broadcast, UdpPort);
@@ -41,6 +40,7 @@ namespace SyncoStronbo.Features.Rooms.Networking {
                     } catch (OperationCanceledException) {
                         break;
                     } catch {
+                        // Swallow transient errors; keep announcing.
                     }
                 }
             }, token);
@@ -57,8 +57,8 @@ namespace SyncoStronbo.Features.Rooms.Networking {
             StopListening();
 
             _listenCts = new CancellationTokenSource();
-            var token = _listenCts.Token;
-            _listener = new UdpClient(UdpPort) { EnableBroadcast = true };
+            var token  = _listenCts.Token;
+            _listener  = new UdpClient(UdpPort) { EnableBroadcast = true };
 
             _ = Task.Run(async () => {
                 while (!token.IsCancellationRequested) {
@@ -82,23 +82,24 @@ namespace SyncoStronbo.Features.Rooms.Networking {
 
         private void HandleDatagram(UdpReceiveResult result) {
             try {
-                using var doc = JsonDocument.Parse(result.Buffer);
-                var root = doc.RootElement;
+                var msg = SspCbor.ParseMap(result.Buffer);
+                if (SspCbor.Tag(msg) != "ANNC") return;
 
-                if (!root.TryGetProperty("Type", out var typeProp) || typeProp.GetString() != "ANNOUNCE")
-                    return;
+                // Fall back to the datagram source address if the host omitted "ip".
+                string ip = msg.TryGetValue("ip", out var ipObj) && ipObj is string s && s.Length > 0
+                    ? s
+                    : result.RemoteEndPoint.Address.ToString();
 
                 var announcement = new RoomAnnouncement(
-                    RoomId: root.GetProperty("RoomId").GetString()!,
-                    RoomName: root.GetProperty("RoomName").GetString()!,
-                    HostIp: root.TryGetProperty("HostIp", out var hip) && hip.GetString() is { Length: > 0 } h
-                        ? h
-                        : result.RemoteEndPoint.Address.ToString(),
-                    TcpPort: root.GetProperty("TcpPort").GetInt32()
+                    RoomId:   (string)msg["id"]!,
+                    RoomName: (string)msg["nm"]!,
+                    HostIp:   ip,
+                    TcpPort:  (int)(ulong)msg["pt"]!
                 );
 
                 OnRoomDiscovered?.Invoke(this, announcement);
             } catch {
+                // Malformed datagrams are silently dropped.
             }
         }
 
@@ -106,7 +107,8 @@ namespace SyncoStronbo.Features.Rooms.Networking {
             foreach (NetworkInterface iface in NetworkInterface.GetAllNetworkInterfaces()) {
                 if (iface.OperationalStatus != OperationalStatus.Up) continue;
                 foreach (UnicastIPAddressInformation ip in iface.GetIPProperties().UnicastAddresses) {
-                    if (ip.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(ip.Address))
+                    if (ip.Address.AddressFamily == AddressFamily.InterNetwork &&
+                        !IPAddress.IsLoopback(ip.Address))
                         return ip.Address.ToString();
                 }
             }

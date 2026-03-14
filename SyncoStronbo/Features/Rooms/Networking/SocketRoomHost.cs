@@ -2,38 +2,59 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
-using System.Text.Json;
+using SyncoStronbo.Features.Rooms.Domain;
 
 namespace SyncoStronbo.Features.Rooms.Networking {
+    /// <summary>
+    /// SSP/1.0 §4 — Host-side TCP session server.
+    ///
+    /// Lifecycle per guest:
+    ///   TCP connect → Guest sends JOIN → Host sends JACK → session active
+    ///   Heartbeat: Host sends PING every 2 s; expects PONG within 6 s.
+    ///   Graceful close: Host broadcasts CLOS on dispose; Guest sends LEAV to leave.
+    /// Framing: CBOR Sequences (RFC 8742).
+    /// </summary>
     internal sealed class SocketRoomHost : IDisposable {
         public const int TcpPort = 13000;
-        private const int LeadMs = 500;
-        private const int PingIntervalMs = 2000;
-        private const int PingTimeoutMs = 6000;
+
+        private const int PingIntervalMs  = 2_000;
+        private const int PingTimeoutMs   = 6_000;
+        private const int HandshakeTimeMs = 5_000;
+        private const int LeadMs          = 500;
+
+        // ── Per-guest state ───────────────────────────────────────────────────
 
         private sealed class GuestState {
-            public TcpClient Client { get; init; } = null!;
-            public SemaphoreSlim WriteLock { get; } = new(1, 1);
-            public long LastPongAtMs { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            public int LatestRttMs { get; set; } = -1;
+            public TcpClient          Client       { get; init; } = null!;
+            public SemaphoreSlim      WriteLock    { get; }       = new(1, 1);
+            public long               LastPongAtMs { get; set; }  = Now();
+            public int                LatestRttMs  { get; set; }  = -1;
+            public string             Name         { get; init; } = string.Empty;
+            public GuestCapabilities  Capabilities { get; init; } = GuestCapabilities.Unknown;
         }
+
+        // ── Fields ────────────────────────────────────────────────────────────
 
         private readonly TcpListener _listener;
         private readonly ConcurrentDictionary<string, GuestState> _guests = new();
         private readonly CancellationTokenSource _cts = new();
 
-        public string RoomId { get; }
+        public string RoomId   { get; }
         public string RoomName { get; }
 
-        public event EventHandler<string>? OnGuestConnected;
-        public event EventHandler<string>? OnGuestDisconnected;
-        public event EventHandler<GuestPingArgs>? OnGuestPingUpdated;
-        public event EventHandler<FlashCommand>? OnFlashScheduled;
+        // ── Events ────────────────────────────────────────────────────────────
+
+        /// <summary>Raised after the JOIN/JACK handshake completes successfully.</summary>
+        public event EventHandler<GuestJoinedArgs>? OnGuestConnected;
+        public event EventHandler<string>?          OnGuestDisconnected;
+        public event EventHandler<GuestPingArgs>?   OnGuestPingUpdated;
+        public event EventHandler<FlashCommand>?    OnFlashScheduled;
+
+        // ── Constructor ───────────────────────────────────────────────────────
 
         public SocketRoomHost(string roomName, string roomId) {
             RoomName = roomName;
-            RoomId = roomId;
+            RoomId   = roomId;
 
             _listener = new TcpListener(IPAddress.Any, TcpPort);
             _listener.Start();
@@ -42,97 +63,149 @@ namespace SyncoStronbo.Features.Rooms.Networking {
             _ = HeartbeatLoopAsync(_cts.Token);
         }
 
+        // ── Public API ────────────────────────────────────────────────────────
+
+        public int GuestCount => _guests.Count;
+
+        public IReadOnlyList<(string Ip, string Name, int RttMs)> GetGuests() {
+            var list = new List<(string, string, int)>(_guests.Count);
+            foreach (var (ip, state) in _guests)
+                list.Add((ip, state.Name, state.LatestRttMs));
+            return list;
+        }
+
+        /// <summary>Broadcasts a FLSH command to all connected guests.</summary>
         public async Task FlashAsync(string action = "on", int leadMs = LeadMs) {
-            long atUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + leadMs;
-            var cmd = new FlashCommand(action, atUnixMs);
-            var bytes = BuildMessage(new { Type = "FLASH", cmd.Action, cmd.AtUnixMs });
+            long atUnixMs = Now() + leadMs;
+            byte[] bytes  = SspCbor.Flsh(action, atUnixMs);
 
-            OnFlashScheduled?.Invoke(this, cmd);
+            OnFlashScheduled?.Invoke(this, new FlashCommand(action, atUnixMs));
 
-            var tasks = new List<Task>();
+            var tasks = new List<Task>(_guests.Count);
             foreach (var (key, state) in _guests)
                 tasks.Add(SendAsync(key, state, bytes));
             await Task.WhenAll(tasks);
         }
 
-        public int GuestCount => _guests.Count;
-
-        public IReadOnlyList<(string Ip, int RttMs)> GetGuests() {
-            var list = new List<(string, int)>(_guests.Count);
-            foreach (var (ip, state) in _guests)
-                list.Add((ip, state.LatestRttMs));
-            return list;
-        }
-
-        private async Task HeartbeatLoopAsync(CancellationToken token) {
-            while (!token.IsCancellationRequested) {
-                try { await Task.Delay(PingIntervalMs, token); } catch (OperationCanceledException) { break; }
-
-                long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-                foreach (var (ip, state) in _guests) {
-                    if (now - state.LastPongAtMs > PingTimeoutMs) {
-                        RemoveGuest(ip, state);
-                        continue;
-                    }
-                    await SendAsync(ip, state, BuildMessage(new { Type = "PING", SentAtMs = now }));
-                }
-            }
-        }
+        // ── Accept loop ───────────────────────────────────────────────────────
 
         private async Task AcceptLoopAsync(CancellationToken token) {
             while (!token.IsCancellationRequested) {
+                TcpClient client;
                 try {
-                    TcpClient client = await _listener.AcceptTcpClientAsync(token);
-                    string ip = ((IPEndPoint)client.Client.RemoteEndPoint!).Address.ToString();
-
-                    var state = new GuestState { Client = client };
-                    _guests[ip] = state;
-                    OnGuestConnected?.Invoke(this, ip);
-                    _ = MonitorGuestAsync(ip, state, token);
+                    client = await _listener.AcceptTcpClientAsync(token);
                 } catch (OperationCanceledException) {
                     break;
                 } catch {
+                    continue;
                 }
+
+                string ip = ((IPEndPoint)client.Client.RemoteEndPoint!).Address.ToString();
+                _ = HandshakeAndMonitorAsync(ip, client, token);
             }
         }
 
-        private async Task MonitorGuestAsync(string ip, GuestState state, CancellationToken token) {
+        // ── JOIN / JACK handshake ─────────────────────────────────────────────
+
+        private async Task HandshakeAndMonitorAsync(
+            string ip, TcpClient client, CancellationToken token) {
             try {
-                using var reader = new StreamReader(state.Client.GetStream(), Encoding.UTF8, leaveOpen: true);
-                while (!token.IsCancellationRequested) {
-                    string? line = await reader.ReadLineAsync(token);
-                    if (line is null) break;
-                    await HandleGuestMessageAsync(ip, state, line);
-                }
+                using var timeout = new CancellationTokenSource(HandshakeTimeMs);
+                using var linked  = CancellationTokenSource.CreateLinkedTokenSource(token, timeout.Token);
+
+                var stream = client.GetStream();
+                var reader = new CborStreamReader(stream);
+
+                // Wait for JOIN ────────────────────────────────────────────────
+                var raw = await reader.ReadNextAsync(linked.Token);
+                if (raw is null) { client.Dispose(); return; }
+
+                var msg  = SspCbor.ParseMap(raw.Value);
+                if (SspCbor.Tag(msg) != "JOIN") { client.Dispose(); return; }
+
+                string            guestName = msg.TryGetValue("nm", out var nm) && nm is string s ? s : ip;
+                GuestCapabilities cap       = SspCbor.ParseCap(msg.TryGetValue("cap", out var c) ? c : null);
+
+                // Send JACK ────────────────────────────────────────────────────
+                byte[] jack = SspCbor.Jack(RoomName, RoomId);
+                await stream.WriteAsync(jack, token);
+
+                // Register guest and start session ────────────────────────────
+                var state = new GuestState {
+                    Client       = client,
+                    LastPongAtMs = Now(),
+                    Name         = guestName,
+                    Capabilities = cap
+                };
+                _guests[ip] = state;
+                OnGuestConnected?.Invoke(this, new GuestJoinedArgs(ip, guestName, cap));
+
+                await MonitorGuestAsync(ip, state, reader, token);
+
             } catch {
+                client.Dispose();
+            }
+        }
+
+        // ── Guest monitor ─────────────────────────────────────────────────────
+
+        private async Task MonitorGuestAsync(
+            string ip, GuestState state, CborStreamReader reader, CancellationToken token) {
+            try {
+                while (!token.IsCancellationRequested) {
+                    var raw = await reader.ReadNextAsync(token);
+                    if (raw is null) break;
+
+                    var msg = SspCbor.ParseMap(raw.Value);
+                    await HandleGuestMessageAsync(ip, state, msg);
+                }
+            } catch (OperationCanceledException) {
+                // Normal shutdown.
+            } catch {
+                // Network error — fall through to cleanup.
             }
 
             RemoveGuest(ip, state);
         }
 
-        private async Task HandleGuestMessageAsync(string ip, GuestState state, string json) {
-            try {
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
-                if (!root.TryGetProperty("Type", out var typeProp)) return;
-
-                switch (typeProp.GetString()) {
-                    case "PONG":
-                        long sentAt = root.GetProperty("SentAtMs").GetInt64();
-                        int rtt = (int)(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - sentAt);
-                        state.LastPongAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                        state.LatestRttMs = rtt;
+        private async Task HandleGuestMessageAsync(
+            string ip, GuestState state, Dictionary<string, object?> msg) {
+            switch (SspCbor.Tag(msg)) {
+                case "PONG":
+                    if (msg.TryGetValue("ms", out var msObj) && msObj is ulong sentAt) {
+                        int rtt = (int)(Now() - (long)sentAt);
+                        state.LastPongAtMs = Now();
+                        state.LatestRttMs  = rtt;
                         OnGuestPingUpdated?.Invoke(this, new GuestPingArgs(ip, rtt));
-                        break;
-                    case "LEAVE":
-                        RemoveGuest(ip, state);
-                        break;
-                }
-            } catch {
+                    }
+                    break;
+
+                case "LEAV":
+                    RemoveGuest(ip, state);
+                    break;
             }
             await Task.CompletedTask;
         }
+
+        // ── Heartbeat loop ────────────────────────────────────────────────────
+
+        private async Task HeartbeatLoopAsync(CancellationToken token) {
+            while (!token.IsCancellationRequested) {
+                try { await Task.Delay(PingIntervalMs, token); }
+                catch (OperationCanceledException) { break; }
+
+                long now = Now();
+                foreach (var (ip, state) in _guests) {
+                    if (now - state.LastPongAtMs > PingTimeoutMs) {
+                        RemoveGuest(ip, state);
+                        continue;
+                    }
+                    await SendAsync(ip, state, SspCbor.Ping(now));
+                }
+            }
+        }
+
+        // ── Send helper ───────────────────────────────────────────────────────
 
         private async Task SendAsync(string ip, GuestState state, byte[] bytes) {
             try {
@@ -154,15 +227,15 @@ namespace SyncoStronbo.Features.Rooms.Networking {
             }
         }
 
-        private static byte[] BuildMessage(object payload)
-            => Encoding.UTF8.GetBytes(JsonSerializer.Serialize(payload) + "\n");
+        // ── Dispose ───────────────────────────────────────────────────────────
 
         public void Dispose() {
-            var closeBytes = BuildMessage(new { Type = "CLOSE" });
+            // Broadcast CLOS to all guests before shutting down.
+            byte[] clos = SspCbor.Clos();
             foreach (var (ip, state) in _guests)
-                _ = SendAsync(ip, state, closeBytes);
+                _ = SendAsync(ip, state, clos);
 
-            Thread.Sleep(200);
+            Thread.Sleep(200); // brief flush window
 
             _cts.Cancel();
             _listener.Stop();
@@ -170,7 +243,17 @@ namespace SyncoStronbo.Features.Rooms.Networking {
             _guests.Clear();
             _cts.Dispose();
         }
+
+        // ── Utility ───────────────────────────────────────────────────────────
+
+        private static long Now() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     }
+
+    internal readonly record struct GuestJoinedArgs(
+        string            Ip,
+        string            Name,
+        GuestCapabilities Capabilities);
 
     internal readonly record struct GuestPingArgs(string Ip, int RttMs);
 }
+
