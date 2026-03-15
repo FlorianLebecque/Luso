@@ -1,8 +1,8 @@
-# SyncoStronbo - Product goals, user stories, and UML-ready specification
+# Luso - Product goals, user stories, and UML-ready specification
 
 ## 1. Product vision
 
-SyncoStronbo is an Android application for synchronized multi-device light playback over a **star topology** on the **same LAN / Wi-Fi network**.
+Luso is an Android application for synchronized multi-device light playback over a **star topology** on the **same LAN / Wi-Fi network**.
 
 The product enables one **Host** device to coordinate one or more **Guest** devices so that supported outputs can react as closely in time as possible.
 
@@ -11,7 +11,7 @@ Confirmed output capabilities in scope:
 - Full-screen color / screen strobe
 - Vibration / haptics
 
-The long-term vision is to evolve SyncoStronbo into a **mini light show studio** where multiple connected devices can be orchestrated through triggers, target groups, and reusable sequences.
+The long-term vision is to evolve Luso into a **mini light show studio** where multiple connected devices can be orchestrated through triggers, target groups, and reusable sequences.
 
 ---
 
@@ -89,7 +89,7 @@ The long-term vision is to evolve SyncoStronbo into a **mini light show studio**
 ## 6. UML-ready use-case model
 
 ### System boundary
-**System:** SyncoStronbo
+**System:** Luso
 
 ### Actors and use cases
 

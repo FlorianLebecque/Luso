@@ -1,5 +1,5 @@
 {
-    "name": "SyncoStronbo Dev Container",
+    "name": "Luso Dev Container",
     "build": {
         "dockerfile": "Dockerfile"
     },

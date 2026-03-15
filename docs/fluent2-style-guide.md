@@ -1,4 +1,4 @@
-# Fluent 2 Style Guide — SyncoStronbo
+# Fluent 2 Style Guide — Luso
 
 This document captures the Fluent 2 design language as interpreted for a **native .NET MAUI Android app**.  
 All decisions are sourced from [fluent2.microsoft.design](https://fluent2.microsoft.design) (read March 2026).  

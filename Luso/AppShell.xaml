@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:homePages="clr-namespace:Luso.Features.Home.Pages"
+    x:Class="Luso.AppShell"
+    FlyoutBehavior="Disabled">
+
+    <!-- Single root page. Feature pages are registered in AppShell.xaml.cs. -->
+    <ShellContent Route="Home"
+                  ContentTemplate="{DataTemplate homePages:HomePage}"/>
+
+</Shell>
