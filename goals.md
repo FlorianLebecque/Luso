@@ -1,5 +1,7 @@
 # Luso - Product goals, user stories, and UML-ready specification
 
+_Last reviewed: 2026-03-15 — reflects post-architecture-alignment state._
+
 ## 1. Product vision
 
 Luso is an Android application for synchronized multi-device light playback over a **star topology** on the **same LAN / Wi-Fi network**.
@@ -7,9 +9,9 @@ Luso is an Android application for synchronized multi-device light playback over
 The product enables one **Host** device to coordinate one or more **Guest** devices so that supported outputs can react as closely in time as possible.
 
 Confirmed output capabilities in scope:
-- Flashlight
-- Full-screen color / screen strobe
-- Vibration / haptics
+- Flashlight ✅ implemented end-to-end (host + guest, via `FlashlightTarget`)
+- Full-screen color / screen strobe 🟡 wired in domain (`ScreenTarget`), guest-side render pending
+- Vibration / haptics ✅ implemented end-to-end (via `VibrationTarget`)
 
 The long-term vision is to evolve Luso into a **mini light show studio** where multiple connected devices can be orchestrated through triggers, target groups, and reusable sequences.
 
@@ -18,27 +20,28 @@ The long-term vision is to evolve Luso into a **mini light show studio** where m
 ## 2. Priority-ordered product goals
 
 ### Priority 1 - Core synchronized session
-1. Allow a user to create a room as **Host**.
-2. Allow one or more users to join that room as **Guests**.
-3. Allow the Host to send synchronized commands to connected Guests.
-4. Optimize the system for **low-latency synchronization** on the same local network.
+1. ✅ Allow a user to create a room as **Host**.
+2. ✅ Allow one or more users to join that room as **Guests**.
+3. ✅ Allow the Host to send synchronized commands to connected Guests.
+4. ✅ Optimize the system for **low-latency synchronization** on the same local network.
 
 ### Priority 2 - Device capability awareness
-5. Each Guest device should provide a **capabilities list** to the system.
-6. Capabilities may include flashlight, full-screen color / screen strobe, and vibration / haptics.
-7. The Host should be able to target devices according to available capabilities.
+5. ✅ Each Guest device provides a **capabilities list** to the system (exchanged in JOIN handshake).
+6. ✅ Capabilities include flashlight, screen, and vibration; modelled as typed `ITarget` instances per device.
+7. 🟡 The Host can target individual devices by ID (`FlashDeviceAsync`); per-capability targeting UI not yet exposed.
 
 ### Priority 3 - Trigger-driven control
-8. The Host should support **manual triggers**.
-9. The Host should support **music / FFT-based triggers**.
-10. The Host should support **predefined sequences**.
-11. The Host should support **rule-based automation**.
+8. ✅ The Host supports **manual triggers** via `ManualTask` routed through `ITaskOrchestrator`.
+9. ✅ The Host supports **strobe triggers** via `StrobeTask` (configurable frequency, routed through `ITaskOrchestrator`).
+10. 🟡 The Host supports **audio-driven triggers** (`AudioTask` with level threshold via `AudioAnalyser`); full FFT trigger engine with configurable rules is not yet implemented.
+11. ❌ The Host does not yet support **predefined sequences**.
+12. ❌ The Host does not yet support **rule-based automation**.
 
 ### Priority 4 - Composition and show logic
-12. The user should be able to define **target groups**.
-13. A target group may include Guests, the Host itself, or both.
-14. Triggers should be assignable to target groups.
-15. The system should support effects such as stroboscope behavior with duration, frequency, and duty cycle.
+13. ❌ The user cannot yet define **target groups**.
+14. ❌ Target group membership (Guests, Host, or both) is not yet implemented.
+15. ❌ Triggers cannot yet be assigned to target groups.
+16. ❌ Stroboscope effect model (duration, frequency, duty cycle) is not yet implemented — only discrete on/off commands exist.
 
 ---
 
@@ -51,9 +54,13 @@ The long-term vision is to evolve Luso into a **mini light show studio** where m
 - Performance expectation: **low-latency synchronization is critical**
 
 ### Confirmed architectural direction
-- The system must be extensible enough to work with multiple device capabilities.
-- The synchronized session is centered on a Host-controlled room.
-- Guests are controlled endpoints and may expose different output capabilities.
+- ✅ `Room` is pure domain — zero protocol knowledge.
+- ✅ Commands dispatch through `Room → IDevice.Targets → ITarget.ExecuteAsync(FlashCommand)`.
+- ✅ Protocol implementations self-register via `[RoomTechnology]` attribute; `RoomFactory` iterates all registered technologies.
+- ✅ All host output flows through `ITaskOrchestrator → ITask → Room` — no direct `Flashlight.Default` or `LightController` bypasses remain.
+- ✅ All UI pages depend only on domain interfaces and application services, never on protocol-specific types.
+- ✅ Lifecycle methods are async (`StartAsync`/`StopAsync`/`CloseAsync`) per Architecture.md §4.3.
+- ✅ `Room.StartAsync()` is the single activation point for all sessions, announcers, and guest connections.
 
 ---
 

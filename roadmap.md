@@ -1,11 +1,11 @@
 # Luso Roadmap
 
-_Last updated: 2026-03-14_
+_Last updated: 2026-03-15_
 
 This roadmap is derived from:
 - [goals.md](goals.md)
+- [Architecture.md](Architecture.md)
 - [docs/protocol.md](docs/protocol.md)
-- Current code implementation under [Luso/Features/Rooms](Luso/Features/Rooms)
 
 Pre-V1 policy:
 - The project is still in active development (pre-V1).
@@ -16,53 +16,100 @@ Pre-V1 policy:
 
 ## 1) Current status snapshot
 
-### ✅ Delivered (foundation)
-- Android app with Host/Guest room lifecycle:
-  - Create room, browse/join room, leave/close room
-- SSP/1.0 transport implemented:
-  - CBOR messages over UDP/TCP
-  - Join handshake with protocol version negotiation (`JOIN`/`JACK`/`JNAK`)
-  - Heartbeat and disconnection handling (`PING`/`PONG`, timeout handling)
-  - Host actions: `FLSH`, `KICK`, `CLOS`
-- Invite workflow implemented:
-  - Guest presence broadcast (`PRES`)
-  - Host invite (`INVI`)
-  - Guest refusal (`INVR`)
-- Host operational UX:
-  - Guest list with ping
-  - Kick guest
-  - Invite candidate list
-- Protocol documentation with packet/sequence diagrams in [docs/protocol.md](docs/protocol.md)
+### ✅ Delivered (foundation + full architecture alignment)
+
+**Room lifecycle & SSP/1.0 transport:**
+- Create room, browse/join room, leave/close room, kick guest
+- CBOR messages over UDP/TCP
+- Join handshake with protocol version negotiation (`JOIN`/`JACK`/`JNAK`)
+- Heartbeat and disconnection handling (`PING`/`PONG`, timeout)
+- Host actions: `FLSH`, `KICK`, `CLOS`
+- Invite workflow: `PRES`, `INVI`, `INVR`
+
+**Host UI:**
+- Guest list with latency/ping display
+- Kick guest, invite candidate list
+- 16-pad per-guest manual trigger (routed through `ManualTask` → `ITaskOrchestrator`)
+- Strobe On mode via `StrobeTask` (configurable frequency)
+- Audio-driven Auto mode via `AudioTask` (level threshold)
+
+**Domain architecture (aligned to Architecture.md):**
+- `Room` is pure domain — zero protocol/infrastructure imports
+- Command flow: `Room → IDevice.Targets → ITarget.ExecuteAsync(FlashCommand)` → protocol delegate
+- Typed `FlashCommand(FlashAction, AtUnixMs)` — no magic strings
+- `TargetKind` enum: `Flashlight`, `Screen`, `Vibration`
+- `LocalDevice.Detect()` auto-discovers platform targets at runtime
+
+**Protocol abstraction layer (`Core/RoomSystem/Contracts/`):**
+- `IRoomTechnology` with nullable factory pattern (`CreateHostSession(Room)`, `CreateGuestSession(Room)`, etc.)
+- `IRoomHostSession`: `StartAsync()`, `StopAsync()`, `CloseAsync()`, `OnGuestConnected/Disconnected/LatencyUpdated`
+- `IRoomGuestSession`: `StartAsync()`, `StopAsync()`, `LeaveAsync()`, `OnFlashCommand`, `OnHostDisconnected`, `OnKicked`
+- `IRoomAnnouncer`: `StartAsync()`, `StopAsync()`
+- `IRoomScanner`: `StartAsync()`, `Stop()`
+- `IInviteSession`, `IDiscoveredRoom`, `IDiscoveredDevice`, `IRoomInvite`
+
+**Technology self-registration:**
+- `[RoomTechnology]` attribute + `IRoomTechnologyCatalog.ScanAndRegister(assembly)`
+- `SspRoomTechnology` self-registers; no factory switch needed
+- Adding a new protocol requires only a new `[RoomTechnology]` class
+
+**Application services:**
+- `IRoomFactory` / `RoomFactory` — iterates catalog, wires sessions, calls `Room.StartAsync()`
+- `ITaskOrchestrator` / `TaskOrchestrator` — one task per `TargetKind`
+- `StrobeTask`, `AudioTask`, `ManualTask` (all routed through orchestrator)
+- `IGuestRosterService` / `GuestRosterService` with latency tracking
+- `IRoomSessionStore` / `RoomSessionStore` (replaces old static state)
+- `RoomDiscoveryCoordinator` with `StartAsync()` / `Stop()`
+- All host output flows through `ITaskOrchestrator → ITask → Room` — no bypasses
+
+**SSP protocol (`Protocols/Ssp/`):**
+- Organized into `Sessions/`, `Discovery/`, `Devices/`, `Wire/` subdirectories
+- `SspHostSession` defers TCP listener to `StartAsync()`
+- `SspGuestSession` accepts `RoomAnnouncement`, connects in `StartAsync()`
+- `SspRoomAnnouncer` / `SspRoomScanner` with async lifecycle
+- `SspDevice` / `SspRemoteTarget` use `DeviceName` and `ExecuteAsync(FlashCommand)`
+
+**UI alignment:**
+- `HostRoomPage` routes pad through `ManualTask` via `ITaskOrchestrator`
+- `GuestRoomPage` has no direct `Flashlight.Default` calls
+- `HomePage` / `BrowseRoomsPage` use `coordinator.StartAsync()`
+- `CreateRoomPage` calls `room.StartAsync()` after `factory.Create()`
+- All pages depend only on domain interfaces, never protocol types
+
+**Cleanup completed:**
+- `LightController` deleted (replaced by `ITarget` dispatch)
+- All `Flashlight.Default` bypasses eliminated from tasks and pages
+- Old flat SSP files and static `RoomSession` removed
 
 ### 🟡 Partially delivered
-- Capability awareness:
-  - Capability map exists and is exchanged in `JOIN`
-  - Host-side targeting by capability is not implemented yet
-- Synchronized command model:
-  - Manual flash command exists
-  - Extended effects (screen strobe/vibration control through protocol-level effect payloads) are not completed
+- **Screen strobe:** `ScreenTarget` present in domain and wired into `LocalDevice.Targets` — guest-page full-screen color overlay rendering not yet connected to `ExecuteAsync`
+- **Audio trigger:** Level-threshold Auto mode functional — full configurable FFT trigger engine (frequency bands, thresholds, conditions) not implemented
+- **Capability UI:** Domain + transport fully capability-aware — host UI does not yet expose per-capability targeting selector
 
-### ❌ Not started (from goals)
+### ❌ Not started
 - Target groups and trigger assignment
 - Predefined sequences
 - Rule-based automation
-- Music/FFT trigger engine integration into session commands
 - Persistence/configuration management for shows, groups, rules
+- Security / room access control
+- Hue protocol integration (invite-only device provider pattern)
 
 ---
 
 ## 2) Roadmap phases
 
-## Phase 0 — Stabilization of current core (next)
-**Goal:** Make Host/Guest room operations robust under real usage.
+## Phase 0 — Screen strobe + stabilization (active)
+**Goal:** Complete the last output target and harden real-world usage.
 
 ### Scope
-- Fix UX responsiveness edge cases (navigation, room startup/teardown, list updates)
+- Connect `ScreenTarget.ExecuteAsync` to a full-screen color overlay in the guest page
 - Add protocol conformance checks (version mismatch, malformed frames, duplicate invite handling)
 - Improve invite reliability and anti-duplication behavior
 - Add structured logs for protocol events (`ANNC`, `PRES`, `INVI`, `JOIN`, `JACK`, `JNAK`, `KICK`, `CLOS`)
+- Fix UX responsiveness edge cases (navigation, room startup/teardown, list updates)
 
 ### Exit criteria
+- Guest screen strobe renders correctly via `ScreenTarget`
 - No duplicate page opens from repeated taps
 - Host create/close/join/leave stays responsive on emulator and device
 - Invite accept/refuse path is stable across two devices
@@ -70,25 +117,26 @@ Pre-V1 policy:
 
 ---
 
-## Phase 1 — Capability-aware control (near-term)
-**Goal:** Fulfill Priority 2 from goals.md.
+## Phase 1 — Capability-aware control UI + strobe model (near-term)
+**Goal:** Surface the existing capability-aware domain layer in the host UI, and introduce a richer effect model.
+
+### Context
+The domain and transport layers are already fully capability-aware (`GuestCapabilities` → `ITarget` per device).
+What remains is exposing this to the user and extending the effect payload beyond discrete on/off.
 
 ### Scope
-- Extend capability model beyond boolean baseline to output-specific constraints
-- Host-side filtering/targeting UI by capability
-- Command validation: host cannot send unsupported output commands to selected targets
-- Improve guest execution adapters for:
-  - Flashlight
-  - Screen output
-  - Vibration
+- Host UI capability targeting selector: allow host to choose which output kind (flashlight / screen / vibration) to trigger
+- Command validation: prevent sending to devices whose `Targets` list lacks the required `TargetKind`
+- Introduce strobe effect model: duration, frequency, duty cycle params in the command payload
+- Extend `FlashCommand` or introduce a new `StrobeCommand` to carry strobe parameters
+- Map strobe command to protocol wire representation at SSP boundary only
 
 ### Protocol impact
-- Evolve capability map as needed for clarity and simplicity (breaking changes allowed pre-V1)
-- Add/standardize optional capability keys where needed
+- Extend `FLSH` payload or add new effect message type — breaking changes allowed pre-V1
 
 ### Exit criteria
-- Host can target only devices supporting required output
-- End-to-end manual command path works for all currently supported capabilities
+- Host can select output kind per triggered command
+- Strobe with duration/frequency/duty cycle executes deterministically on flashlight and screen targets
 
 ---
 
@@ -127,7 +175,22 @@ Pre-V1 policy:
 
 ---
 
-## Phase 4 — Product hardening and scale-up (long-term)
+## Phase 4 — Protocol expansion (long-term)
+**Goal:** Prove multi-technology architecture with a second protocol.
+
+### Scope
+- Hue bridge integration as invite-only device provider (`HueRoomTechnology`)
+- `CreateHostSession` / `CreateGuestSession` → `null`; `CreateInviteSession` → `HueInviteSession`
+- Hue lights appear as `IDevice` with `ScreenTarget` (RGB output)
+- No changes to `Room`, `RoomFactory`, or any page required
+
+### Exit criteria
+- Hue bulbs controllable from the host pad alongside phone guests
+- Architecture proven for the invite-only device-provider pattern end-to-end
+
+---
+
+## Phase 5 — Product hardening and scale-up (long-term)
 **Goal:** Production readiness and extensibility.
 
 ### Scope
@@ -147,22 +210,25 @@ Pre-V1 policy:
 
 ## 3) Prioritized backlog (next execution order)
 
-- [ ] **Stabilize invite/join UX and session transitions**
-- [ ] **Capability-based target filtering in Host UI**
-- [ ] **Introduce richer effect model (strobe + screen + vibration params)**
-- [ ] **Implement target groups and persistence**
-- [ ] **Implement predefined sequences**
-- [ ] **Implement rule engine + FFT triggers**
-- [ ] **Security/auth and long-session hardening**
+- [ ] **P0** Connect `ScreenTarget.ExecuteAsync` to guest-page full-screen strobe overlay
+- [ ] **P0** Stabilize invite/join UX and session transitions
+- [ ] **P0** Add protocol diagnostics and structured logging
+- [ ] **P1** Host UI: capability-based output selector (flashlight / screen / vibration)
+- [ ] **P1** Introduce strobe effect model (duration / frequency / duty cycle)
+- [ ] **P2** Implement target groups with persistence
+- [ ] **P2** Implement predefined sequence model and playback
+- [ ] **P3** Implement rule engine + configurable FFT trigger dispatch
+- [ ] **P4** Hue bridge integration (invite-only device provider)
+- [ ] **P5** Security/auth and long-session hardening
 
 ---
 
 ## 4) Deliverable mapping to goals.md
 
-- **Priority 1 (core synchronized session):** largely delivered, now in stabilization/hardening loop
-- **Priority 2 (capability awareness):** transport delivered, control-layer targeting pending
-- **Priority 3 (trigger-driven control):** planned in Phase 3
-- **Priority 4 (composition/show logic):** planned in Phases 2 and 3
+- **Priority 1 (core synchronized session):** ✅ fully delivered — room lifecycle, SSP transport, synchronized `FlashCommand` with timestamp, guest execution, kick, invite all working.
+- **Priority 2 (capability awareness):** ✅ domain + transport fully delivered (capabilities exchanged, typed `ITarget` per device, `Room.FlashAsync` filters by `TargetKind`); host UI targeting selector pending (Phase 1).
+- **Priority 3 (trigger-driven control):** manual ✅ (`ManualTask`); strobe ✅ (`StrobeTask`); audio level–threshold ✅ (`AudioTask`); full FFT/rule engine ❌ planned Phase 3.
+- **Priority 4 (composition/show logic):** planned Phases 2–3.
 
 ---
 
@@ -183,52 +249,60 @@ This keeps implementation and protocol documentation synchronized.
 Use this section as a direct source for GitHub Issues and GitHub Projects fields.
 
 ### Suggested fields
-- **Milestone:** `M0 Stabilization`, `M1 Capability Control`, `M2 Composition`, `M3 Trigger Engine`, `M4 Hardening`
+- **Milestone:** `M0 Screen Strobe + Stabilization`, `M1 Capability Control`, `M2 Composition`, `M3 Trigger Engine`, `M4 Hue Integration`, `M5 Hardening`
 - **Labels:** `roadmap`, `phase:*`, `area:protocol`, `area:ui`, `area:networking`, `area:audio`, `priority:*`
 - **Status:** `Backlog`, `Ready`, `In Progress`, `Blocked`, `Done`
 
 ### Issue-ready work items
 
-- [ ] `M0` Stabilize room navigation and close responsiveness  
-  **Labels:** `roadmap`, `phase:0`, `area:ui`, `priority:high`  
+- [ ] `M0` Connect ScreenTarget to guest-page full-screen color overlay
+  **Labels:** `roadmap`, `phase:0`, `area:ui`, `priority:high`
+  **Definition of done:** guest page renders full-screen color strobe driven by `ScreenTarget.ExecuteAsync`.
+
+- [ ] `M0` Stabilize room navigation and session transitions
+  **Labels:** `roadmap`, `phase:0`, `area:ui`, `priority:high`
   **Definition of done:** no duplicate page opens; create/close/leave actions are responsive under repeated taps.
 
-- [ ] `M0` Harden invite workflow reliability  
-  **Labels:** `roadmap`, `phase:0`, `area:networking`, `area:protocol`, `priority:high`  
+- [ ] `M0` Harden invite workflow reliability
+  **Labels:** `roadmap`, `phase:0`, `area:networking`, `area:protocol`, `priority:high`
   **Definition of done:** invite accept/refuse flows work consistently across two devices; duplicate/inflight invite handling is deterministic.
 
-- [ ] `M0` Add protocol diagnostics and error surfacing  
-  **Labels:** `roadmap`, `phase:0`, `area:protocol`, `priority:medium`  
-  **Definition of done:** structured logs for core message flow (`ANNC`, `PRES`, `INVI`, `JOIN`, `JACK`, `JNAK`, `KICK`, `CLOS`) and visible user errors.
+- [ ] `M0` Add protocol diagnostics and error surfacing
+  **Labels:** `roadmap`, `phase:0`, `area:protocol`, `priority:medium`
+  **Definition of done:** structured logs for core message flow and visible user errors for protocol mismatches.
 
-- [ ] `M1` Implement capability-based target filtering  
-  **Labels:** `roadmap`, `phase:1`, `area:ui`, `area:protocol`, `priority:high`  
-  **Definition of done:** Host can only select/send commands to compatible devices.
+- [ ] `M1` Host UI capability-based output selector
+  **Labels:** `roadmap`, `phase:1`, `area:ui`, `priority:high`
+  **Definition of done:** Host can select which `TargetKind` to trigger; commands only reach compatible devices.
 
-- [ ] `M1` Extend output adapters (flash/screen/vibration)  
-  **Labels:** `roadmap`, `phase:1`, `area:networking`, `priority:high`  
-  **Definition of done:** all three output categories execute reliably from Host commands.
+- [ ] `M1` Strobe effect model (duration / frequency / duty cycle)
+  **Labels:** `roadmap`, `phase:1`, `area:protocol`, `priority:high`
+  **Definition of done:** strobe effect with full parameters executes deterministically on flashlight and screen targets.
 
-- [ ] `M2` Implement target groups with persistence  
-  **Labels:** `roadmap`, `phase:2`, `area:ui`, `priority:high`  
+- [ ] `M2` Implement target groups with persistence
+  **Labels:** `roadmap`, `phase:2`, `area:ui`, `priority:high`
   **Definition of done:** groups can be created/edited/saved and used as command targets.
 
-- [ ] `M2` Implement predefined sequence model and playback  
-  **Labels:** `roadmap`, `phase:2`, `area:protocol`, `priority:high`  
+- [ ] `M2` Implement predefined sequence model and playback
+  **Labels:** `roadmap`, `phase:2`, `area:protocol`, `priority:high`
   **Definition of done:** saved ordered effects execute with deterministic timing across guests.
 
-- [ ] `M3` Implement rule engine v1  
-  **Labels:** `roadmap`, `phase:3`, `area:protocol`, `priority:medium`  
+- [ ] `M3` Implement rule engine v1
+  **Labels:** `roadmap`, `phase:3`, `area:protocol`, `priority:medium`
   **Definition of done:** condition-to-action rules can be configured and executed.
 
-- [ ] `M3` Integrate FFT/music trigger dispatch  
-  **Labels:** `roadmap`, `phase:3`, `area:audio`, `area:protocol`, `priority:medium`  
+- [ ] `M3` Integrate FFT/music trigger dispatch
+  **Labels:** `roadmap`, `phase:3`, `area:audio`, `area:protocol`, `priority:medium`
   **Definition of done:** audio events can trigger groups/effects with observable execution logs.
 
-- [ ] `M4` Implement auth/security baseline for rooms  
-  **Labels:** `roadmap`, `phase:4`, `area:networking`, `priority:high`  
+- [ ] `M4` Hue bridge integration
+  **Labels:** `roadmap`, `phase:4`, `area:networking`, `priority:medium`
+  **Definition of done:** Hue bulbs controllable as `IDevice` instances from the host pad.
+
+- [ ] `M5` Implement auth/security baseline for rooms
+  **Labels:** `roadmap`, `phase:5`, `area:networking`, `priority:high`
   **Definition of done:** room access control implemented and documented.
 
-- [ ] `M4` Export/import show configurations  
-  **Labels:** `roadmap`, `phase:4`, `area:ui`, `priority:medium`  
+- [ ] `M5` Export/import show configurations
+  **Labels:** `roadmap`, `phase:5`, `area:ui`, `priority:medium`
   **Definition of done:** users can save/load reusable show configuration bundles.
