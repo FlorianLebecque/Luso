@@ -1,6 +1,6 @@
 # Luso - Product goals, user stories, and UML-ready specification
 
-_Last reviewed: 2026-03-15 — updated to reflect current implementation state._
+_Last reviewed: 2026-03-15 — reflects post-architecture-alignment state._
 
 ## 1. Product vision
 
@@ -9,9 +9,9 @@ Luso is an Android application for synchronized multi-device light playback over
 The product enables one **Host** device to coordinate one or more **Guest** devices so that supported outputs can react as closely in time as possible.
 
 Confirmed output capabilities in scope:
-- Flashlight ✅ implemented end-to-end
-- Full-screen color / screen strobe 🟡 wired in domain, guest-side render pending
-- Vibration / haptics ✅ implemented end-to-end
+- Flashlight ✅ implemented end-to-end (host + guest, via `FlashlightTarget`)
+- Full-screen color / screen strobe 🟡 wired in domain (`ScreenTarget`), guest-side render pending
+- Vibration / haptics ✅ implemented end-to-end (via `VibrationTarget`)
 
 The long-term vision is to evolve Luso into a **mini light show studio** where multiple connected devices can be orchestrated through triggers, target groups, and reusable sequences.
 
@@ -31,16 +31,17 @@ The long-term vision is to evolve Luso into a **mini light show studio** where m
 7. 🟡 The Host can target individual devices by ID (`FlashDeviceAsync`); per-capability targeting UI not yet exposed.
 
 ### Priority 3 - Trigger-driven control
-8. ✅ The Host supports **manual triggers** (On/Off mode with pad per guest, `FlashAsync` through domain).
-9. 🟡 The Host supports **audio-driven triggers** (level-threshold `Auto` mode via `AudioAnalyser`); full FFT trigger engine with configurable rules is not yet implemented.
-10. ❌ The Host does not yet support **predefined sequences**.
-11. ❌ The Host does not yet support **rule-based automation**.
+8. ✅ The Host supports **manual triggers** via `ManualTask` routed through `ITaskOrchestrator`.
+9. ✅ The Host supports **strobe triggers** via `StrobeTask` (configurable frequency, routed through `ITaskOrchestrator`).
+10. 🟡 The Host supports **audio-driven triggers** (`AudioTask` with level threshold via `AudioAnalyser`); full FFT trigger engine with configurable rules is not yet implemented.
+11. ❌ The Host does not yet support **predefined sequences**.
+12. ❌ The Host does not yet support **rule-based automation**.
 
 ### Priority 4 - Composition and show logic
-12. ❌ The user cannot yet define **target groups**.
-13. ❌ Target group membership (Guests, Host, or both) is not yet implemented.
-14. ❌ Triggers cannot yet be assigned to target groups.
-15. ❌ Stroboscope effect model (duration, frequency, duty cycle) is not yet implemented — only discrete on/off commands exist.
+13. ❌ The user cannot yet define **target groups**.
+14. ❌ Target group membership (Guests, Host, or both) is not yet implemented.
+15. ❌ Triggers cannot yet be assigned to target groups.
+16. ❌ Stroboscope effect model (duration, frequency, duty cycle) is not yet implemented — only discrete on/off commands exist.
 
 ---
 
@@ -53,12 +54,13 @@ The long-term vision is to evolve Luso into a **mini light show studio** where m
 - Performance expectation: **low-latency synchronization is critical**
 
 ### Confirmed architectural direction
-- The system must be extensible enough to work with multiple device capabilities.
-- The synchronized session is centered on a Host-controlled room.
-- Guests are controlled endpoints and may expose different output capabilities.
-- Commands dispatch through `ITarget.ExecuteAsync` — `Room` has no protocol knowledge. ✅ Implemented.
-- Protocol implementations self-register via `[RoomTechnology]` attribute; `RoomFactory` iterates all registered technologies. ✅ Implemented.
-- `Room` is pure domain; infrastructure is injected by `RoomFactory`. ✅ Implemented.
+- ✅ `Room` is pure domain — zero protocol knowledge.
+- ✅ Commands dispatch through `Room → IDevice.Targets → ITarget.ExecuteAsync(FlashCommand)`.
+- ✅ Protocol implementations self-register via `[RoomTechnology]` attribute; `RoomFactory` iterates all registered technologies.
+- ✅ All host output flows through `ITaskOrchestrator → ITask → Room` — no direct `Flashlight.Default` or `LightController` bypasses remain.
+- ✅ All UI pages depend only on domain interfaces and application services, never on protocol-specific types.
+- ✅ Lifecycle methods are async (`StartAsync`/`StopAsync`/`CloseAsync`) per Architecture.md §4.3.
+- ✅ `Room.StartAsync()` is the single activation point for all sessions, announcers, and guest connections.
 
 ---
 
