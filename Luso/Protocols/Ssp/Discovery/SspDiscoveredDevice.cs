@@ -14,6 +14,7 @@ namespace Luso.Features.Rooms.Networking.Ssp
         public string DeviceName => _pres.GuestName;
         public string Address => _pres.GuestIp;
         public string TechnologyId => SspRoomTechnology.Id;
+        public string? PairingHint => null;
 
         /// <summary>Raw IP, kept internal for the invite sender.</summary>
         internal string GuestIp => _pres.GuestIp;

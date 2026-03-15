@@ -51,11 +51,15 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
+		<PackageReference Include="HueApi" Version="3.0.0" />
+		<PackageReference Include="HueApi.ColorConverters" Version="3.0.0" />
 		<PackageReference Include="MathNet.Numerics" Version="5.0.0" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.0" />
 		<PackageReference Include="Microsoft.Maui.Controls" Version="8.0.100" />
 		<PackageReference Include="NAudio" Version="2.2.1" />
 		<PackageReference Include="System.Formats.Cbor" Version="8.0.0" />
+		<PackageReference Include="Zeroconf" Version="3.7.16" />
 	</ItemGroup>
 
 	<!-- Android -->
