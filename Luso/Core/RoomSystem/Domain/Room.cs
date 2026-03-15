@@ -147,6 +147,24 @@ namespace Luso.Features.Rooms.Domain
                 .Select(t => t.ExecuteAsync(cmd)));
         }
 
+        /// <summary>Sends a flash command to one specific target on a device (by TargetId).</summary>
+        public Task FlashTargetAsync(string deviceId, FlashAction action, string targetId)
+        {
+            if (!IsHost) throw new InvalidOperationException("Only the room host can trigger a flash.");
+
+            IDevice? device;
+            if (LocalDevice is not null && LocalDevice.DeviceId == deviceId)
+                device = LocalDevice;
+            else if (!_devices.TryGetValue(deviceId, out device))
+                return Task.CompletedTask;
+
+            var target = device.Targets.FirstOrDefault(t => t.TargetId == targetId);
+            if (target is null) return Task.CompletedTask;
+
+            var cmd = new FlashCommand(action, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 50);
+            return target.ExecuteAsync(cmd);
+        }
+
         /// <summary>Removes a device from the session.</summary>
         public async Task<bool> KickDeviceAsync(string deviceId)
         {

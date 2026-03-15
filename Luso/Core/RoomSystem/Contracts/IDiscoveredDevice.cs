@@ -21,5 +21,12 @@ namespace Luso.Features.Rooms.Domain.Technologies
         /// the correct <see cref="IInviteSession"/>.
         /// </summary>
         string TechnologyId { get; }
+
+        /// <summary>
+        /// When non-null, the host page must show this instruction to the user and
+        /// wait for confirmation before calling <c>Room.SendInviteAsync</c>.
+        /// Returns <c>null</c> for technologies that require no manual pairing step.
+        /// </summary>
+        string? PairingHint { get; }
     }
 }

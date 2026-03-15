@@ -1,5 +1,6 @@
 #nullable enable
 using Luso.Features.Rooms.Domain;
+using Luso.Features.Rooms.Domain.Targets;
 using Luso.Features.Rooms.Domain.Technologies;
 using Luso.Features.Rooms.Services;
 using Luso.Shared.Session;
@@ -8,41 +9,47 @@ namespace Luso.Features.Rooms.Pages;
 
 public partial class HostRoomPage : ContentPage
 {
-    // ── Mode ─────────────────────────────────────────────────────────────────
-
-    private enum FlashMode { Off, On, Auto }
-    private FlashMode _mode = FlashMode.Off;
-
     // ── Injected services ─────────────────────────────────────────────────────
 
     private readonly IRoomSessionStore _session;
     private readonly ITaskOrchestrator _orchestrator;
     private readonly IGuestRosterService _roster;
 
-    // ── Manual pad task (active in Off mode) ──────────────────────────────────
-    private ManualTask? _manualTask;
+    // ── Fixed-button toggle state ─────────────────────────────────────────────
 
-    // ── Pad ───────────────────────────────────────────────────────────────────
+    private bool _micActive;
 
-    // Pastel palette — readable on the dark (#1C1C1C) background
-    private static readonly Color[] PadColors = {
-        Color.FromArgb("#F28B82"), // coral
-        Color.FromArgb("#F4A261"), // peach
-        Color.FromArgb("#E9C46A"), // gold
-        Color.FromArgb("#80C9A4"), // mint
-        Color.FromArgb("#74C2E1"), // sky blue
-        Color.FromArgb("#8AB4F8"), // periwinkle
-        Color.FromArgb("#C58AF9"), // lavender
-        Color.FromArgb("#F48FB1"), // pink
-        Color.FromArgb("#7DCFBF"), // teal
-        Color.FromArgb("#F4B183"), // melon
-        Color.FromArgb("#A8D8A8"), // sage green
-        Color.FromArgb("#E0C89A"), // wheat
-        Color.FromArgb("#90C8E8"), // powder blue
-        Color.FromArgb("#D4A0A8"), // dusty rose
-        Color.FromArgb("#A8D0B8"), // mint sage
-        Color.FromArgb("#A0B8D8"), // slate blue
-    };
+    // References kept so we can update their visuals on press/toggle.
+    private Button? _btnStrobe;
+    private Button? _btnMic;
+    private Button? _btnAll;
+
+    // Pastel colour per target button — shown on press, gray at rest.
+    private readonly Dictionary<Button, Color> _targetPastelColors = new();
+
+    // ── Colors ────────────────────────────────────────────────────────────────
+
+    private static readonly Color ColInactive = Color.FromArgb("#383838"); // DarkSurfaceRaised
+    private static readonly Color ColStrobe = Color.FromArgb("#0078D4"); // BrandPrimary
+    private static readonly Color ColMicOn = Color.FromArgb("#FFB900"); // SemanticWarning
+    private static readonly Color ColAllOn = Color.FromArgb("#0078D4"); // BrandPrimary
+
+    // Per-target colour: bilinear gradient across the pad grid.
+    // Corners: top-left=coral, top-right=sky, bottom-left=gold, bottom-right=mint.
+    private static Color PastelAt(int row, int col, int totalRows, int totalCols)
+    {
+        var tl = Color.FromArgb("#F28B82"); // coral
+        var tr = Color.FromArgb("#74C2E1"); // sky
+        var bl = Color.FromArgb("#E9C46A"); // gold
+        var br = Color.FromArgb("#80C9A4"); // mint
+        float u = totalCols > 1 ? col / (float)(totalCols - 1) : 0f;
+        float v = totalRows > 1 ? row / (float)(totalRows - 1) : 0f;
+        static float L(float a, float b, float t) => a + (b - a) * t;
+        float r = L(L(tl.Red, tr.Red, u), L(bl.Red, br.Red, u), v);
+        float g = L(L(tl.Green, tr.Green, u), L(bl.Green, br.Green, u), v);
+        float b2 = L(L(tl.Blue, tr.Blue, u), L(bl.Blue, br.Blue, u), v);
+        return new Color(r, g, b2);
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -53,7 +60,6 @@ public partial class HostRoomPage : ContentPage
         _orchestrator = sp.GetRequiredService<ITaskOrchestrator>();
         _roster = sp.GetRequiredService<IGuestRosterService>();
         InitializeComponent();
-        UpdateModeButtons();
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -73,7 +79,6 @@ public partial class HostRoomPage : ContentPage
         _roster.GuestsChanged += OnRosterGuestsChanged;
 
         RoomNotifications.SetHostStatus(room.RoomName, _roster.Guests.Count);
-        ApplyMode();
         RefreshPadGrid();
     }
 
@@ -82,6 +87,7 @@ public partial class HostRoomPage : ContentPage
         base.OnDisappearing();
 
         _orchestrator.StopAll();
+        _micActive = false;
 
         if (_session.Current is { } room)
         {
@@ -92,169 +98,208 @@ public partial class HostRoomPage : ContentPage
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // Mode selector
+    // Fixed button handlers
     // ═════════════════════════════════════════════════════════════════════════
 
-    private void OnModeClicked(object sender, EventArgs e)
+    private void OnStrobePressed(object sender, EventArgs e)
     {
-        if (sender is not Button btn) return;
-
-        _mode = btn.Text switch
-        {
-            "On" => FlashMode.On,
-            "Auto" => FlashMode.Auto,
-            _ => FlashMode.Off,
-        };
-
-        UpdateModeButtons();
-        ApplyMode();
+        if (_btnStrobe is not null) _btnStrobe.BackgroundColor = ColStrobe;
+        _orchestrator.Start(new StrobeTask(TargetKind.Flashlight, 10));
+        _orchestrator.Start(new StrobeTask(TargetKind.Screen, 10));
     }
 
-    private void UpdateModeButtons()
+    private void OnStrobeReleased(object sender, EventArgs e)
     {
-        // Determine target segment (0=Off, 1=On, 2=Auto)
-        int segment = _mode switch
-        {
-            FlashMode.Off => 0,
-            FlashMode.On => 1,
-            _ => 2,
-        };
-
-        // Pill width = inner container width / 3 (container has 4px padding each side)
-        double innerW = modeContainer.Width > 8 ? modeContainer.Width - 8 : 0;
-        double segW = innerW / 3.0;
-        _ = modePill.TranslateTo(segment * segW, 0, 220, Easing.CubicOut);
-
-        // Update label colours
-        var active = Colors.White;
-        var inactive = Color.FromArgb("#B3B0AD");
-        lblModeOff.TextColor = _mode == FlashMode.Off ? active : inactive;
-        lblModeOn.TextColor = _mode == FlashMode.On ? active : inactive;
-        lblModeAuto.TextColor = _mode == FlashMode.Auto ? active : inactive;
-
-        sliderPanel.IsVisible = _mode == FlashMode.On;
+        if (_btnStrobe is not null) _btnStrobe.BackgroundColor = ColInactive;
+        _orchestrator.Stop(TargetKind.Flashlight);
+        _orchestrator.Stop(TargetKind.Screen);
     }
 
-    private void ApplyMode()
+    private void OnMicToggled(object sender, EventArgs e)
     {
-        switch (_mode)
+        _micActive = !_micActive;
+
+        if (_micActive)
         {
-            case FlashMode.On:
-                _manualTask = null;
-                _orchestrator.Start(new StrobeTask(Domain.Targets.TargetKind.Flashlight, frequencySlider.Value));
-                break;
-            case FlashMode.Auto:
-                _manualTask = null;
-                _orchestrator.Start(new AudioTask(Domain.Targets.TargetKind.Flashlight));
-                break;
-            default:
-                _manualTask = new ManualTask(Domain.Targets.TargetKind.Flashlight);
-                _orchestrator.Start(_manualTask);
-                break;
+            _orchestrator.Start(new AudioTask(TargetKind.Flashlight));
+            _orchestrator.Start(new AudioTask(TargetKind.Screen));
         }
+        else
+        {
+            _orchestrator.Stop(TargetKind.Flashlight);
+            _orchestrator.Stop(TargetKind.Screen);
+        }
+
+        if (_btnMic is not null)
+            _btnMic.BackgroundColor = _micActive ? ColMicOn : ColInactive;
     }
 
-    private void OnFrequencyChanged(object sender, ValueChangedEventArgs e)
+    private void OnAllPressed(object sender, EventArgs e)
     {
-        lblFrequency.Text = $"Frequency: {e.NewValue:F1} Hz";
-        if (_mode == FlashMode.On)
-            _orchestrator.Start(new StrobeTask(Domain.Targets.TargetKind.Flashlight, e.NewValue));
+        if (_session.Current is not { IsHost: true } room) return;
+        if (_btnAll is not null) _btnAll.BackgroundColor = ColAllOn;
+        _ = room.FlashAsync(FlashAction.On, TargetKind.Flashlight);
+        _ = room.FlashAsync(FlashAction.On, TargetKind.Screen);
+    }
+
+    private void OnAllReleased(object sender, EventArgs e)
+    {
+        if (_session.Current is not { IsHost: true } room) return;
+        if (_btnAll is not null) _btnAll.BackgroundColor = ColInactive;
+        _ = room.FlashAsync(FlashAction.Off, TargetKind.Flashlight);
+        _ = room.FlashAsync(FlashAction.Off, TargetKind.Screen);
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // Pad — press = light ON everywhere, release = light OFF everywhere
+    // Per-target hold handlers
     // ═════════════════════════════════════════════════════════════════════════
 
-    private void OnPadPressed(object sender, EventArgs e)
+    private void OnTargetPressed(object sender, EventArgs e)
     {
-        if (_manualTask is null) return;
-        if (sender is not Button { CommandParameter: var param }) return;
-        var deviceId = param as string ?? _session.Current?.LocalDevice?.DeviceId;
-        _manualTask.Fire(FlashAction.On, deviceId);
+        if (sender is not Button { CommandParameter: (string deviceId, string targetId) } btn) return;
+        if (_session.Current is not { IsHost: true } room) return;
+        btn.BackgroundColor = _targetPastelColors.TryGetValue(btn, out var c) ? c : ColAllOn;
+        _ = room.FlashTargetAsync(deviceId, FlashAction.On, targetId);
     }
 
-    private void OnPadReleased(object sender, EventArgs e)
+    private void OnTargetReleased(object sender, EventArgs e)
     {
-        if (_manualTask is null) return;
-        if (sender is not Button { CommandParameter: var param }) return;
-        var deviceId = param as string ?? _session.Current?.LocalDevice?.DeviceId;
-        _manualTask.Fire(FlashAction.Off, deviceId);
+        if (sender is not Button { CommandParameter: (string deviceId, string targetId) } btn) return;
+        if (_session.Current is not { IsHost: true } room) return;
+        btn.BackgroundColor = ColInactive;
+        _ = room.FlashTargetAsync(deviceId, FlashAction.Off, targetId);
     }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Pad grid builder
+    // ═════════════════════════════════════════════════════════════════════════
 
     private void RefreshPadGrid()
     {
-        // Build the ordered device list: host always first
-        var items = new List<(string Label, string? Ip)>
-        {
-            (DeviceInfo.Current.Name + "\n(You)", null),
-        };
-        foreach (var g in _roster.Guests)
-            items.Add((g.DisplayName, g.Ip));
-
-        int n = items.Count;
-
-        // Smart column count: favour square-ish grids
-        int cols = n switch
-        {
-            1 => 1,
-            <= 4 => 2,
-            <= 9 => 3,
-            _ => 4,
-        };
-
-        int rows = (int)Math.Ceiling(n / (double)cols);
-        int totalSlots = rows * cols;
-        int leftover = totalSlots - n;
-
-        // Leftover empty slots → absorbed into the first (host) pad as extra column-span,
-        // making it the "hero" tile and avoiding wasted whitespace.
-        int firstColSpan = 1 + leftover;
+        _btnMic = null;
+        _btnAll = null;
 
         padGrid.RowDefinitions.Clear();
         padGrid.ColumnDefinitions.Clear();
         padGrid.Children.Clear();
+        _targetPastelColors.Clear();
+
+        const int cols = 3;
+
+        // ── Collect per-target buttons ────────────────────────────────────────
+
+        var room = _session.Current;
+        var targetItems = new List<(string DeviceName, string TargetLabel,
+                                   string DeviceId, string TargetId)>();
+
+        void AddDevice(string deviceName, string deviceId, IReadOnlyList<ITarget> targets)
+        {
+            foreach (var t in targets)
+            {
+                if (t.Kind != TargetKind.Flashlight && t.Kind != TargetKind.Screen) continue;
+                targetItems.Add((deviceName, t.DisplayName, deviceId, t.TargetId));
+            }
+        }
+
+        if (room?.LocalDevice is { } local)
+            // Host is the control center — show only Flashlight, never Screen.
+            AddDevice(DeviceInfo.Current.Name + " (You)", local.DeviceId,
+                      local.Targets.Where(t => t.Kind == TargetKind.Flashlight).ToList());
+
+        foreach (var guest in _roster.Guests)
+        {
+            var device = room?.GetDevices().FirstOrDefault(d => d.DeviceId == guest.Ip);
+            if (device is not null)
+                AddDevice(guest.DisplayName, device.DeviceId, device.Targets);
+        }
+
+        // ── Build row definitions ─────────────────────────────────────────────
+
+        int totalItems = 3 + targetItems.Count;
+        int rows = (int)Math.Ceiling(totalItems / (double)cols);
 
         for (int r = 0; r < rows; r++)
             padGrid.RowDefinitions.Add(new RowDefinition(GridLength.Star));
         for (int c = 0; c < cols; c++)
             padGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
 
-        int gridCol = 0;
-        int gridRow = 0;
+        // ── Fixed row: Strobe / Mic / All ─────────────────────────────────────
 
-        for (int i = 0; i < n; i++)
+        _btnStrobe = MakeFixedButton(
+            "Strobe", ColInactive,
+            pressed: OnStrobePressed, released: OnStrobeReleased,
+            row: 0, col: 0);
+        padGrid.Children.Add(_btnStrobe);
+
+        _btnMic = MakeFixedButton(
+            "Mic", _micActive ? ColMicOn : ColInactive,
+            clicked: OnMicToggled,
+            row: 0, col: 1);
+        padGrid.Children.Add(_btnMic);
+
+        _btnAll = MakeFixedButton(
+            "All", ColInactive,
+            pressed: OnAllPressed, released: OnAllReleased,
+            row: 0, col: 2);
+        padGrid.Children.Add(_btnAll);
+
+        // ── Dynamic target buttons ────────────────────────────────────────────
+
+        for (int i = 0; i < targetItems.Count; i++)
         {
-            var (label, ip) = items[i];
-            int span = (i == 0) ? firstColSpan : 1;
+            var (deviceName, targetLabel, deviceId, targetId) = targetItems[i];
+            int slot = i + 3; // offset past fixed row
+            int row = slot / cols;
+            int col = slot % cols;
 
             var btn = new Button
             {
-                Text = label,
-                FontSize = 13,
+                Text = $"{deviceName}\n{targetLabel}",
+                FontSize = 12,
                 LineBreakMode = LineBreakMode.WordWrap,
-                BackgroundColor = PadColors[i % PadColors.Length],
-                TextColor = Colors.Black,
+                BackgroundColor = ColInactive,
+                TextColor = Colors.White,
                 CornerRadius = 14,
-                CommandParameter = ip,
+                CommandParameter = (deviceId, targetId),
                 HorizontalOptions = LayoutOptions.Fill,
                 VerticalOptions = LayoutOptions.Fill,
             };
-            btn.Pressed += OnPadPressed;
-            btn.Released += OnPadReleased;
+            _targetPastelColors[btn] = PastelAt(row - 1, col, Math.Max(1, rows - 1), cols);
+            btn.Pressed += OnTargetPressed;
+            btn.Released += OnTargetReleased;
 
-            Grid.SetRow(btn, gridRow);
-            Grid.SetColumn(btn, gridCol);
-            Grid.SetColumnSpan(btn, span);
+            Grid.SetRow(btn, row);
+            Grid.SetColumn(btn, col);
             padGrid.Children.Add(btn);
-
-            // Advance cursor, wrapping to next row when the current one is full
-            gridCol += span;
-            if (gridCol >= cols)
-            {
-                gridCol = 0;
-                gridRow++;
-            }
         }
+    }
+
+    private static Button MakeFixedButton(
+        string label, Color bg,
+        EventHandler? clicked = null,
+        EventHandler? pressed = null,
+        EventHandler? released = null,
+        int row = 0, int col = 0)
+    {
+        var btn = new Button
+        {
+            Text = label,
+            FontSize = 14,
+            FontAttributes = FontAttributes.Bold,
+            LineBreakMode = LineBreakMode.WordWrap,
+            BackgroundColor = bg,
+            TextColor = Colors.White,
+            CornerRadius = 14,
+            HorizontalOptions = LayoutOptions.Fill,
+            VerticalOptions = LayoutOptions.Fill,
+        };
+        if (clicked is not null) btn.Clicked += clicked;
+        if (pressed is not null) btn.Pressed += pressed;
+        if (released is not null) btn.Released += released;
+
+        Grid.SetRow(btn, row);
+        Grid.SetColumn(btn, col);
+        return btn;
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -296,6 +341,13 @@ public partial class HostRoomPage : ContentPage
     private async Task SendInviteAsync(IDiscoveredDevice candidate)
     {
         if (_session.Current is not { IsHost: true } room) return;
+
+        if (candidate.PairingHint is { } hint)
+        {
+            bool confirmed = await DisplayAlert(
+                "Pairing required", hint, "OK — I pressed the button", "Cancel");
+            if (!confirmed) return;
+        }
 
         try
         {
@@ -354,5 +406,4 @@ public partial class HostRoomPage : ContentPage
         await _session.ClearAsync();
         await Shell.Current.GoToAsync("//Home");
     }
-
 }
