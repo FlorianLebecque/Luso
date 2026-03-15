@@ -1,6 +1,6 @@
 # Luso Roadmap
 
-_Last updated: 2026-03-14_
+_Last updated: 2026-03-15_
 
 This roadmap is derived from:
 - [goals.md](goals.md)
@@ -16,9 +16,9 @@ Pre-V1 policy:
 
 ## 1) Current status snapshot
 
-### ✅ Delivered (foundation)
+### ✅ Delivered (foundation + architecture rework)
 - Android app with Host/Guest room lifecycle:
-  - Create room, browse/join room, leave/close room
+  - Create room, browse/join room, leave/close room, kick guest
 - SSP/1.0 transport implemented:
   - CBOR messages over UDP/TCP
   - Join handshake with protocol version negotiation (`JOIN`/`JACK`/`JNAK`)
@@ -29,31 +29,62 @@ Pre-V1 policy:
   - Host invite (`INVI`)
   - Guest refusal (`INVR`)
 - Host operational UX:
-  - Guest list with ping
+  - Guest list with latency/ping display
   - Kick guest
   - Invite candidate list
+  - 16-pad per-guest manual trigger
+  - Audio-driven Auto mode (level threshold via `AudioAnalyser`)
+- Guest capability exchange:
+  - `GuestCapabilities` (flashlight, screen, vibration + dimensions) declared in `JOIN`
+  - `SspDevice.BuildTargets` maps capabilities to typed `SspRemoteTarget` instances at connect time
+  - `LocalDevice.Detect()` auto-discovers platform targets at runtime
+- Capability-aware command dispatch (domain level):
+  - `Room.FlashAsync` dispatches through `IDevice.Targets` filtered by `TargetKind`
+  - `Room.FlashDeviceAsync` targets a single device by ID
+  - `Room.KickDeviceAsync` routes through `IDevice.DisconnectAsync`
+- Guest-side output execution:
+  - `FlashlightTarget` — precise timing via `cmd.AtUnixMs`, `Flashlight.Default`
+  - `VibrationTarget` — 200 ms vibration on action `"on"`
+  - `RgbLightTarget` — wired in domain layer (guest-page render pending)
+- Architecture rework (2026-03-15):
+  - `Room` is pure domain — zero protocol/infrastructure imports
+  - Commands flow: `Room` → `IDevice.Targets` → `ITarget.ExecuteAsync` → protocol delegate
+  - `IRoomHostSession` / `IRoomGuestSession` slimmed to lifecycle events only
+  - `SspRemoteTarget` encapsulates the socket call behind a `Func<FlashCommand,Task>` delegate
+  - `SspGuestSession` handles flash dispatch internally — guest page has no command handling
+  - `RoomFactory` is the sole entry point for `RoomTechnologyRegistry` in the Features layer
+  - Multi-technology pattern: `[RoomTechnology]`-decorated classes self-register; `RoomFactory.Create` starts sessions for all of them
+  - `IDiscoveredDevice.TechnologyId` + `IDiscoveredRoom.TechnologyId` enable protocol-agnostic invite routing and join
 - Protocol documentation with packet/sequence diagrams in [docs/protocol.md](docs/protocol.md)
+- Architecture review + class diagrams in [docs/architecture-review.md](docs/architecture-review.md)
 
 ### 🟡 Partially delivered
 - Capability awareness:
-  - Capability map exists and is exchanged in `JOIN`
-  - Host-side targeting by capability is not implemented yet
+  - Domain + transport layers fully capability-aware
+  - Host UI does not yet expose per-capability targeting selector (flashlight vs. screen vs. vibration)
 - Synchronized command model:
-  - Manual flash command exists
-  - Extended effects (screen strobe/vibration control through protocol-level effect payloads) are not completed
+  - `FlashCommand` with `Action` + `AtUnixMs` timestamp implemented
+  - Discrete on/off synchronization works end-to-end
+  - Strobe pattern model (duration/frequency/duty cycle) not yet implemented
+- Screen strobe:
+  - `RgbLightTarget` present in domain and wired into `LocalDevice.Targets`
+  - Guest-page rendering (full-screen color overlay) not yet connected to `ExecuteAsync`
+- Audio trigger:
+  - Level-threshold Auto mode in host UI is functional
+  - Proper configurable FFT trigger engine (frequency bands, thresholds, conditions) not implemented
 
-### ❌ Not started (from goals)
+### ❌ Not started
 - Target groups and trigger assignment
 - Predefined sequences
 - Rule-based automation
-- Music/FFT trigger engine integration into session commands
 - Persistence/configuration management for shows, groups, rules
+- Security / room access control
 
 ---
 
 ## 2) Roadmap phases
 
-## Phase 0 — Stabilization of current core (next)
+## Phase 0 — Stabilization of current core (active)
 **Goal:** Make Host/Guest room operations robust under real usage.
 
 ### Scope
@@ -61,34 +92,42 @@ Pre-V1 policy:
 - Add protocol conformance checks (version mismatch, malformed frames, duplicate invite handling)
 - Improve invite reliability and anti-duplication behavior
 - Add structured logs for protocol events (`ANNC`, `PRES`, `INVI`, `JOIN`, `JACK`, `JNAK`, `KICK`, `CLOS`)
+- Connect `RgbLightTarget.ExecuteAsync` to a full-screen color overlay in the guest page
+- Route Auto-mode local flashlight through `Room.FlashAsync` to unify all output dispatch (currently bypassed)
+- Replace `async void` fire-and-forget patterns in `LightController` with cancellable `Task` loop
 
 ### Exit criteria
 - No duplicate page opens from repeated taps
 - Host create/close/join/leave stays responsive on emulator and device
 - Invite accept/refuse path is stable across two devices
 - Protocol mismatch path is deterministic and user-visible
+- All output paths (host + guest) route through `Room.FlashAsync` / `ITarget.ExecuteAsync`
+- Guest screen strobe renders correctly
 
 ---
 
-## Phase 1 — Capability-aware control (near-term)
-**Goal:** Fulfill Priority 2 from goals.md.
+## Phase 1 — Capability-aware control UI + strobe model (near-term)
+**Goal:** Surface the existing capability-aware domain layer in the host UI, and introduce a richer effect model.
+
+### Context
+The domain and transport layers are already fully capability-aware (`GuestCapabilities` → `ITarget` per device).  
+What remains is exposing this to the user and extending the effect payload beyond discrete on/off.
 
 ### Scope
-- Extend capability model beyond boolean baseline to output-specific constraints
-- Host-side filtering/targeting UI by capability
-- Command validation: host cannot send unsupported output commands to selected targets
-- Improve guest execution adapters for:
-  - Flashlight
-  - Screen output
-  - Vibration
+- Host UI capability targeting selector: allow host to choose which output kind (flashlight / screen / vibration) to trigger
+- Command validation: prevent sending to devices whose `Targets` list lacks the required `TargetKind`
+- Introduce strobe effect model: duration, frequency, duty cycle params in the command payload
+- Extend `FlashCommand` or introduce a new `StrobeCommand` to carry strobe parameters
+- Map strobe command to protocol wire representation at SSP boundary only
+- Replace magic strings `"on"` / `"off"` with a typed `FlashAction` enum in the domain
 
 ### Protocol impact
-- Evolve capability map as needed for clarity and simplicity (breaking changes allowed pre-V1)
-- Add/standardize optional capability keys where needed
+- Extend `FLSH` payload or add new effect message type — breaking changes allowed pre-V1
 
 ### Exit criteria
-- Host can target only devices supporting required output
-- End-to-end manual command path works for all currently supported capabilities
+- Host can select output kind per triggered command
+- Strobe with duration/frequency/duty cycle executes deterministically on flashlight and screen targets
+- No magic `"on"`/`"off"` strings remain in domain layer
 
 ---
 
@@ -147,22 +186,26 @@ Pre-V1 policy:
 
 ## 3) Prioritized backlog (next execution order)
 
-- [ ] **Stabilize invite/join UX and session transitions**
-- [ ] **Capability-based target filtering in Host UI**
-- [ ] **Introduce richer effect model (strobe + screen + vibration params)**
-- [ ] **Implement target groups and persistence**
-- [ ] **Implement predefined sequences**
-- [ ] **Implement rule engine + FFT triggers**
-- [ ] **Security/auth and long-session hardening**
+- [ ] **P0** Connect `RgbLightTarget.ExecuteAsync` to guest-page full-screen strobe overlay
+- [ ] **P0** Route Auto-mode local output through `Room.FlashAsync` (remove direct `Flashlight.Default` calls)
+- [ ] **P0** Stabilize invite/join UX and session transitions
+- [ ] **P0** Replace `LightController` busy-loop with cancellable async loop
+- [ ] **P1** Replace `"on"`/`"off"` magic strings with typed `FlashAction` enum
+- [ ] **P1** Host UI: capability-based output selector (flashlight / screen / vibration)
+- [ ] **P1** Introduce strobe effect model (duration / frequency / duty cycle)
+- [ ] **P2** Implement target groups with persistence
+- [ ] **P2** Implement predefined sequence model and playback
+- [ ] **P3** Implement rule engine + configurable FFT trigger dispatch
+- [ ] **P4** Security/auth and long-session hardening
 
 ---
 
 ## 4) Deliverable mapping to goals.md
 
-- **Priority 1 (core synchronized session):** largely delivered, now in stabilization/hardening loop
-- **Priority 2 (capability awareness):** transport delivered, control-layer targeting pending
-- **Priority 3 (trigger-driven control):** planned in Phase 3
-- **Priority 4 (composition/show logic):** planned in Phases 2 and 3
+- **Priority 1 (core synchronized session):** fully delivered — room lifecycle, SSP transport, synchronized `FlashCommand` with timestamp, guest execution, kick, invite all working.
+- **Priority 2 (capability awareness):** domain + transport fully delivered (capabilities exchanged, typed `ITarget` per device, `Room.FlashAsync` filters by `TargetKind`); host UI targeting selector and strobe model pending (Phase 1).
+- **Priority 3 (trigger-driven control):** manual triggers ✅; audio level–threshold Auto mode 🟡; full FFT/rule engine ❌ planned Phase 3.
+- **Priority 4 (composition/show logic):** planned Phases 2–3.
 
 ---
 
