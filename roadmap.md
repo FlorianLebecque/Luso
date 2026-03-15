@@ -1,11 +1,11 @@
-# SyncoStronbo Roadmap
+# Luso Roadmap
 
 _Last updated: 2026-03-14_
 
 This roadmap is derived from:
 - [goals.md](goals.md)
 - [docs/protocol.md](docs/protocol.md)
-- Current code implementation under [SyncoStronbo/Features/Rooms](SyncoStronbo/Features/Rooms)
+- Current code implementation under [Luso/Features/Rooms](Luso/Features/Rooms)
 
 Pre-V1 policy:
 - The project is still in active development (pre-V1).

@@ -1,4 +1,4 @@
-# SyncoStronbo Session Protocol — SSP/1.0
+# Luso Session Protocol — SSP/1.0
 
 > **Status:** Specification (target design)  
 > **Encoding:** CBOR (RFC 7049) — binary, compact, RFC-standard  
@@ -11,7 +11,7 @@
 
 ## 1. Overview
 
-SyncoStronbo operates as a **star topology** over a shared LAN/Wi-Fi network.  
+Luso operates as a **star topology** over a shared LAN/Wi-Fi network.  
 One device acts as **Host**, all others act as **Guests**.
 
 ```

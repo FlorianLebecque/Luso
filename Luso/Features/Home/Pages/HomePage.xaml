@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Luso.Features.Home.Pages.HomePage"
+             Title=""
+             Shell.NavBarIsVisible="False">
+
+    <!-- Outer overlay grid: room list behind, FAB on top -->
+    <Grid>
+
+        <!-- Main layout -->
+        <Grid RowDefinitions="Auto,*" RowSpacing="0">
+
+            <!-- Header -->
+            <VerticalStackLayout Grid.Row="0" Padding="20,24,20,10" Spacing="4">
+                <Label Text="Luso"
+                       Style="{StaticResource Title2}"
+                       TextColor="White"/>
+                <HorizontalStackLayout Spacing="8">
+                    <ActivityIndicator x:Name="spinner"
+                                       IsRunning="True"
+                                       WidthRequest="14" HeightRequest="14"
+                                       VerticalOptions="Center"
+                                       Color="{StaticResource DarkTextSecondary}"/>
+                    <Label x:Name="lblStatus"
+                           Text="Scanning for rooms…"
+                           Style="{StaticResource Caption1}"
+                           TextColor="{StaticResource DarkTextSecondary}"
+                           VerticalOptions="Center"/>
+                </HorizontalStackLayout>
+            </VerticalStackLayout>
+
+            <!-- Room list -->
+            <CollectionView x:Name="roomsCollection"
+                            Grid.Row="1"
+                            SelectionMode="Single"
+                            SelectionChanged="OnRoomSelected"
+                            Margin="16,0,16,80">
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout VerticalOptions="Center" HorizontalOptions="Center"
+                                         Spacing="8" Margin="0,80,0,0">
+                        <Label Text="No rooms nearby"
+                               Style="{StaticResource Subtitle2}"
+                               TextColor="{StaticResource DarkTextSecondary}"
+                               HorizontalOptions="Center"/>
+                        <Label Text="Make sure someone is hosting on the same Wi-Fi"
+                               Style="{StaticResource Caption1}"
+                               TextColor="{StaticResource DarkTextDisabled}"
+                               HorizontalTextAlignment="Center"
+                               HorizontalOptions="Center"/>
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,0,0,10"
+                                BackgroundColor="{StaticResource DarkSurface}"
+                                StrokeThickness="0"
+                                StrokeShape="RoundRectangle 14"
+                                Padding="18,14">
+                            <Border.Shadow>
+                                <Shadow Brush="Black" Offset="0,2" Radius="6" Opacity="0.3"/>
+                            </Border.Shadow>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <VerticalStackLayout Grid.Column="0" Spacing="4">
+                                    <Label Text="{Binding RoomName}"
+                                           Style="{StaticResource Body1Strong}"
+                                           TextColor="White"/>
+                                    <Label Text="{Binding HostIp}"
+                                           Style="{StaticResource Caption1}"
+                                           TextColor="{StaticResource DarkTextSecondary}"/>
+                                </VerticalStackLayout>
+                                <Label Grid.Column="1" Text="›" FontSize="22"
+                                       TextColor="{StaticResource DarkTextSecondary}"
+                                       VerticalOptions="Center"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </Grid>
+
+        <!-- FAB: Host a new room -->
+        <Button x:Name="btnCreate"
+                Text="+"
+                FontSize="28"
+                FontAttributes="Bold"
+                BackgroundColor="{StaticResource BrandPrimary}"
+                TextColor="White"
+                WidthRequest="60"
+                HeightRequest="60"
+                CornerRadius="30"
+                HorizontalOptions="End"
+                VerticalOptions="End"
+                Margin="0,0,20,24"
+                Clicked="btnCreateClicked">
+            <Button.Shadow>
+                <Shadow Brush="Black" Offset="0,4" Radius="12" Opacity="0.5"/>
+            </Button.Shadow>
+        </Button>
+
+    </Grid>
+</ContentPage>
