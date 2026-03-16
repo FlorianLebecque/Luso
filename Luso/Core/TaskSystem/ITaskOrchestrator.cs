@@ -11,5 +11,7 @@ namespace Luso.Features.Rooms.Services
         void Start(ITask task);
         void Stop(TargetKind kind);
         void StopAll();
+        /// <summary>Returns true if a task is currently running for the given kind.</summary>
+        bool IsRunning(TargetKind kind);
     }
 }

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    DeckPadView — renders a single DeckPage as a live interactive button grid.
+
+    Usage:
+        <deck:DeckPadView Page="{Binding CurrentPage}"
+                          Context="{Binding ButtonContext}"
+                          ExtraButtons="{Binding RuntimeButtons}" />
+
+    • Page        — the DeckPage to render (persisted config)
+    • Context     — DeckButtonContext with Room + Orchestrator
+    • ExtraButtons— runtime-only buttons appended after the page's own buttons
+                    (used by HostRoomPage for connected-guest target buttons)
+-->
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Luso.Shared.Components.Deck.DeckPadView">
+    <Grid x:Name="innerGrid"
+          RowSpacing="8"
+          ColumnSpacing="8"
+          HorizontalOptions="Fill"
+          VerticalOptions="Fill"/>
+</ContentView>

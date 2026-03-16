@@ -3,6 +3,9 @@ using Luso.Features.Rooms.Domain;
 using Luso.Features.Rooms.Domain.Targets;
 using Luso.Features.Rooms.Domain.Technologies;
 using Luso.Features.Rooms.Services;
+using Luso.Shared.Components.Deck;
+using Luso.Shared.Deck.Models;
+using Luso.Shared.Deck.Registry;
 using Luso.Shared.Session;
 
 namespace Luso.Features.Rooms.Pages;
@@ -14,42 +17,16 @@ public partial class HostRoomPage : ContentPage
     private readonly IRoomSessionStore _session;
     private readonly ITaskOrchestrator _orchestrator;
     private readonly IGuestRosterService _roster;
+    private readonly IDeckButtonRegistry _deckRegistry;
 
-    // ── Fixed-button toggle state ─────────────────────────────────────────────
+    // ── Deck state (fully in-memory, never persisted) ─────────────────────────
 
-    private bool _micActive;
+    /// <summary>Index of the currently visible page; preserved across roster rebuilds.</summary>
+    private int _activePageIndex;
 
-    // References kept so we can update their visuals on press/toggle.
-    private Button? _btnStrobe;
-    private Button? _btnMic;
-    private Button? _btnAll;
-
-    // Pastel colour per target button — shown on press, gray at rest.
-    private readonly Dictionary<Button, Color> _targetPastelColors = new();
-
-    // ── Colors ────────────────────────────────────────────────────────────────
-
-    private static readonly Color ColInactive = Color.FromArgb("#383838"); // DarkSurfaceRaised
-    private static readonly Color ColStrobe = Color.FromArgb("#0078D4"); // BrandPrimary
-    private static readonly Color ColMicOn = Color.FromArgb("#FFB900"); // SemanticWarning
-    private static readonly Color ColAllOn = Color.FromArgb("#0078D4"); // BrandPrimary
-
-    // Per-target colour: bilinear gradient across the pad grid.
-    // Corners: top-left=coral, top-right=sky, bottom-left=gold, bottom-right=mint.
-    private static Color PastelAt(int row, int col, int totalRows, int totalCols)
-    {
-        var tl = Color.FromArgb("#F28B82"); // coral
-        var tr = Color.FromArgb("#74C2E1"); // sky
-        var bl = Color.FromArgb("#E9C46A"); // gold
-        var br = Color.FromArgb("#80C9A4"); // mint
-        float u = totalCols > 1 ? col / (float)(totalCols - 1) : 0f;
-        float v = totalRows > 1 ? row / (float)(totalRows - 1) : 0f;
-        static float L(float a, float b, float t) => a + (b - a) * t;
-        float r = L(L(tl.Red, tr.Red, u), L(bl.Red, br.Red, u), v);
-        float g = L(L(tl.Green, tr.Green, u), L(bl.Green, br.Green, u), v);
-        float b2 = L(L(tl.Blue, tr.Blue, u), L(bl.Blue, br.Blue, u), v);
-        return new Color(r, g, b2);
-    }
+    // Grid dimensions for auto-generated pages.
+    private const int DeckCols = 3;
+    private const int DeckRows = 3; // 3×3 = 9 slots per page
 
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -59,6 +36,7 @@ public partial class HostRoomPage : ContentPage
         _session = sp.GetRequiredService<IRoomSessionStore>();
         _orchestrator = sp.GetRequiredService<ITaskOrchestrator>();
         _roster = sp.GetRequiredService<IGuestRosterService>();
+        _deckRegistry = sp.GetRequiredService<IDeckButtonRegistry>();
         InitializeComponent();
     }
 
@@ -73,13 +51,14 @@ public partial class HostRoomPage : ContentPage
         var room = _session.Current;
         if (room is null || !room.IsHost) { Shell.Current.GoToAsync("//Home"); return; }
 
-        lblRoomName.Text = room.RoomName;
-
         _roster.WireRoom(room);
         _roster.GuestsChanged += OnRosterGuestsChanged;
 
         RoomNotifications.SetHostStatus(room.RoomName, _roster.Guests.Count);
-        RefreshPadGrid();
+
+        deckPad.Registry = _deckRegistry;
+        _activePageIndex = 0;
+        BindDeck(room);
     }
 
     protected override void OnDisappearing()
@@ -87,7 +66,6 @@ public partial class HostRoomPage : ContentPage
         base.OnDisappearing();
 
         _orchestrator.StopAll();
-        _micActive = false;
 
         if (_session.Current is { } room)
         {
@@ -98,223 +76,109 @@ public partial class HostRoomPage : ContentPage
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // Fixed button handlers
+    // Deck wiring — fully dynamic, never persisted
     // ═════════════════════════════════════════════════════════════════════════
 
-    private void OnStrobePressed(object sender, EventArgs e)
+    private void BindDeck(Room room)
     {
-        if (_btnStrobe is not null) _btnStrobe.BackgroundColor = ColStrobe;
-        _orchestrator.Start(new StrobeTask(TargetKind.Flashlight, 10));
-        _orchestrator.Start(new StrobeTask(TargetKind.Screen, 10));
+        var layout = BuildLayout(room);
+
+        // Clamp active index in case page count shrank.
+        _activePageIndex = Math.Clamp(_activePageIndex, 0, layout.Pages.Count - 1);
+        var activePage = layout.Pages[_activePageIndex];
+
+        deckTabBar.DeckLayout = layout;
+        deckTabBar.ActivePage = activePage;
+
+        var ctx = new DeckButtonContext { Room = room, Orchestrator = _orchestrator };
+        deckPad.Context = ctx;
+        deckPad.Page = activePage;
+        deckPad.ExtraButtons = null; // targets are now first-class deck buttons
     }
 
-    private void OnStrobeReleased(object sender, EventArgs e)
+    /// <summary>
+    /// Builds a fully in-memory <see cref="DeckLayout"/> by collecting all buttons
+    /// (fixed controls + every connected-device target) and packing them into
+    /// pages of <see cref="DeckRows"/> × <see cref="DeckCols"/> automatically.
+    /// </summary>
+    private DeckLayout BuildLayout(Room room)
     {
-        if (_btnStrobe is not null) _btnStrobe.BackgroundColor = ColInactive;
-        _orchestrator.Stop(TargetKind.Flashlight);
-        _orchestrator.Stop(TargetKind.Screen);
-    }
-
-    private async void OnMicToggled(object sender, EventArgs e)
-    {
-        // When turning on, verify / request mic permission before proceeding.
-        if (!_micActive)
+        // 1. Ordered flat list of all button configs (no row/col yet).
+        var all = new List<DeckButtonConfig>
         {
-            var status = await Permissions.CheckStatusAsync<Permissions.Microphone>();
-            if (status != PermissionStatus.Granted)
-                status = await Permissions.RequestAsync<Permissions.Microphone>();
-
-            if (status != PermissionStatus.Granted)
-            {
-                await DisplayAlert("Microphone required",
-                    "Grant microphone access in Settings to use the mic mode.", "OK");
-                return; // leave _micActive = false, button stays inactive
-            }
-        }
-
-        _micActive = !_micActive;
-
-        if (_micActive)
-        {
-            _orchestrator.Start(new AudioTask(TargetKind.Flashlight));
-            _orchestrator.Start(new AudioTask(TargetKind.Screen));
-        }
-        else
-        {
-            _orchestrator.Stop(TargetKind.Flashlight);
-            _orchestrator.Stop(TargetKind.Screen);
-        }
-
-        if (_btnMic is not null)
-            _btnMic.BackgroundColor = _micActive ? ColMicOn : ColInactive;
-    }
-
-    private void OnAllPressed(object sender, EventArgs e)
-    {
-        if (_session.Current is not { IsHost: true } room) return;
-        if (_btnAll is not null) _btnAll.BackgroundColor = ColAllOn;
-        _ = room.FlashAsync(FlashAction.On, TargetKind.Flashlight);
-        _ = room.FlashAsync(FlashAction.On, TargetKind.Screen);
-    }
-
-    private void OnAllReleased(object sender, EventArgs e)
-    {
-        if (_session.Current is not { IsHost: true } room) return;
-        if (_btnAll is not null) _btnAll.BackgroundColor = ColInactive;
-        _ = room.FlashAsync(FlashAction.Off, TargetKind.Flashlight);
-        _ = room.FlashAsync(FlashAction.Off, TargetKind.Screen);
-    }
-
-    // ═════════════════════════════════════════════════════════════════════════
-    // Per-target hold handlers
-    // ═════════════════════════════════════════════════════════════════════════
-
-    private void OnTargetPressed(object sender, EventArgs e)
-    {
-        if (sender is not Button { CommandParameter: (string deviceId, string targetId) } btn) return;
-        if (_session.Current is not { IsHost: true } room) return;
-        btn.BackgroundColor = _targetPastelColors.TryGetValue(btn, out var c) ? c : ColAllOn;
-        _ = room.FlashTargetAsync(deviceId, FlashAction.On, targetId);
-    }
-
-    private void OnTargetReleased(object sender, EventArgs e)
-    {
-        if (sender is not Button { CommandParameter: (string deviceId, string targetId) } btn) return;
-        if (_session.Current is not { IsHost: true } room) return;
-        btn.BackgroundColor = ColInactive;
-        _ = room.FlashTargetAsync(deviceId, FlashAction.Off, targetId);
-    }
-
-    // ═════════════════════════════════════════════════════════════════════════
-    // Pad grid builder
-    // ═════════════════════════════════════════════════════════════════════════
-
-    private void RefreshPadGrid()
-    {
-        _btnMic = null;
-        _btnAll = null;
-
-        padGrid.RowDefinitions.Clear();
-        padGrid.ColumnDefinitions.Clear();
-        padGrid.Children.Clear();
-        _targetPastelColors.Clear();
-
-        const int cols = 3;
-
-        // ── Collect per-target buttons ────────────────────────────────────────
-
-        var room = _session.Current;
-        var targetItems = new List<(string DeviceName, string TargetLabel,
-                                   string DeviceId, string TargetId)>();
+            new() { TypeId = "strobe" },
+            new() { TypeId = "mic" },
+            new() { TypeId = "all.flash" },
+        };
 
         void AddDevice(string deviceName, string deviceId, IReadOnlyList<ITarget> targets)
         {
             foreach (var t in targets)
             {
                 if (t.Kind != TargetKind.Flashlight && t.Kind != TargetKind.Screen) continue;
-                targetItems.Add((deviceName, t.DisplayName, deviceId, t.TargetId));
+                all.Add(new DeckButtonConfig
+                {
+                    TypeId = "target.flash",
+                    Label = $"{deviceName}\n{t.DisplayName}",
+                    Params = new Dictionary<string, string>
+                    {
+                        ["deviceId"] = deviceId,
+                        ["targetId"] = t.TargetId,
+                    },
+                });
             }
         }
 
-        if (room?.LocalDevice is { } local)
-            // Host is the control center — show only Flashlight, never Screen.
+        if (room.LocalDevice is { } local)
             AddDevice(DeviceInfo.Current.Name + " (You)", local.DeviceId,
-                      local.Targets.Where(t => t.Kind == TargetKind.Flashlight).ToList());
+                local.Targets.Where(t => t.Kind == TargetKind.Flashlight).ToList());
 
         foreach (var guest in _roster.Guests)
         {
-            var device = room?.GetDevices().FirstOrDefault(d => d.DeviceId == guest.Ip);
+            var device = room.GetDevices().FirstOrDefault(d => d.DeviceId == guest.Ip);
             if (device is not null)
                 AddDevice(guest.DisplayName, device.DeviceId, device.Targets);
         }
 
-        // ── Build row definitions ─────────────────────────────────────────────
+        // 2. Pack into pages of DeckRows × DeckCols.
+        int slotsPerPage = DeckRows * DeckCols;
+        var layout = new DeckLayout { LayoutId = "host-runtime" };
+        int pageIndex = 0;
 
-        int totalItems = 3 + targetItems.Count;
-        int rows = (int)Math.Ceiling(totalItems / (double)cols);
-
-        for (int r = 0; r < rows; r++)
-            padGrid.RowDefinitions.Add(new RowDefinition(GridLength.Star));
-        for (int c = 0; c < cols; c++)
-            padGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
-
-        // ── Fixed row: Strobe / Mic / All ─────────────────────────────────────
-
-        _btnStrobe = MakeFixedButton(
-            "Strobe", ColInactive,
-            pressed: OnStrobePressed, released: OnStrobeReleased,
-            row: 0, col: 0);
-        padGrid.Children.Add(_btnStrobe);
-
-        _btnMic = MakeFixedButton(
-            "Mic", _micActive ? ColMicOn : ColInactive,
-            clicked: OnMicToggled,
-            row: 0, col: 1);
-        padGrid.Children.Add(_btnMic);
-
-        _btnAll = MakeFixedButton(
-            "All", ColInactive,
-            pressed: OnAllPressed, released: OnAllReleased,
-            row: 0, col: 2);
-        padGrid.Children.Add(_btnAll);
-
-        // ── Dynamic target buttons ────────────────────────────────────────────
-
-        for (int i = 0; i < targetItems.Count; i++)
+        for (int start = 0; start < all.Count; start += slotsPerPage, pageIndex++)
         {
-            var (deviceName, targetLabel, deviceId, targetId) = targetItems[i];
-            int slot = i + 3; // offset past fixed row
-            int row = slot / cols;
-            int col = slot % cols;
-
-            var btn = new Button
+            var page = new DeckPage
             {
-                Text = $"{deviceName}\n{targetLabel}",
-                FontSize = 12,
-                LineBreakMode = LineBreakMode.WordWrap,
-                BackgroundColor = ColInactive,
-                TextColor = Colors.White,
-                CornerRadius = 14,
-                CommandParameter = (deviceId, targetId),
-                HorizontalOptions = LayoutOptions.Fill,
-                VerticalOptions = LayoutOptions.Fill,
+                Name = pageIndex == 0 ? room.RoomName : $"Page {pageIndex + 1}",
+                Rows = DeckRows,
+                Cols = DeckCols,
             };
-            _targetPastelColors[btn] = PastelAt(row - 1, col, Math.Max(1, rows - 1), cols);
-            btn.Pressed += OnTargetPressed;
-            btn.Released += OnTargetReleased;
 
-            Grid.SetRow(btn, row);
-            Grid.SetColumn(btn, col);
-            padGrid.Children.Add(btn);
+            for (int s = 0; s < slotsPerPage && start + s < all.Count; s++)
+                page.Buttons.Add(all[start + s].WithSlot(s / DeckCols, s % DeckCols));
+
+            layout.Pages.Add(page);
         }
+
+        if (layout.Pages.Count == 0)
+            layout.Pages.Add(new DeckPage { Name = room.RoomName, Rows = DeckRows, Cols = DeckCols });
+
+        return layout;
     }
 
-    private static Button MakeFixedButton(
-        string label, Color bg,
-        EventHandler? clicked = null,
-        EventHandler? pressed = null,
-        EventHandler? released = null,
-        int row = 0, int col = 0)
-    {
-        var btn = new Button
-        {
-            Text = label,
-            FontSize = 14,
-            FontAttributes = FontAttributes.Bold,
-            LineBreakMode = LineBreakMode.WordWrap,
-            BackgroundColor = bg,
-            TextColor = Colors.White,
-            CornerRadius = 14,
-            HorizontalOptions = LayoutOptions.Fill,
-            VerticalOptions = LayoutOptions.Fill,
-        };
-        if (clicked is not null) btn.Clicked += clicked;
-        if (pressed is not null) btn.Pressed += pressed;
-        if (released is not null) btn.Released += released;
+    // ═════════════════════════════════════════════════════════════════════════
+    // Tab bar events
+    // ═════════════════════════════════════════════════════════════════════════
 
-        Grid.SetRow(btn, row);
-        Grid.SetColumn(btn, col);
-        return btn;
+    private void OnPageSelected(object sender, DeckPage page)
+    {
+        // The pages in the tab bar belong to the current layout; find index by id.
+        if (deckTabBar.DeckLayout is not { } layout) return;
+        var idx = layout.Pages.FindIndex(p => p.PageId == page.PageId);
+        if (idx >= 0) _activePageIndex = idx;
+
+        deckTabBar.ActivePage = page;
+        deckPad.Page = page;
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -325,7 +189,9 @@ public partial class HostRoomPage : ContentPage
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            RefreshPadGrid();
+            if (_session.Current is { } room)
+                BindDeck(room); // full rebuild — targets are now deck buttons
+
             RoomNotifications.SetHostStatus(
                 _session.Current?.RoomName ?? string.Empty,
                 _roster.Guests.Count);
@@ -333,7 +199,7 @@ public partial class HostRoomPage : ContentPage
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // Toolbar — Invite (＋)
+    // Toolbar — Invite
     // ═════════════════════════════════════════════════════════════════════════
 
     private async void OnInviteToolbarClicked(object sender, EventArgs e)
@@ -412,10 +278,33 @@ public partial class HostRoomPage : ContentPage
     }
 
     // ═════════════════════════════════════════════════════════════════════════
+    // Back-button interception
+    // ═════════════════════════════════════════════════════════════════════════
+
+    protected override bool OnBackButtonPressed()
+    {
+        // Fire-and-forget: intercept the press and ask asynchronously.
+        _ = ConfirmLeaveAsync();
+        return true;
+    }
+
+    private async Task ConfirmLeaveAsync()
+    {
+        bool confirmed = await DisplayAlert(
+            "Close room?",
+            "Leaving will disconnect all guests and close the room.",
+            "Close room", "Stay");
+        if (confirmed)
+            await LeaveRoomAsync();
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
     // Toolbar — Close room
     // ═════════════════════════════════════════════════════════════════════════
 
-    private async void OnLeaveClicked(object sender, EventArgs e)
+    private async void OnLeaveClicked(object sender, EventArgs e) => await LeaveRoomAsync();
+
+    private async Task LeaveRoomAsync()
     {
         RoomNotifications.Clear();
         await _session.ClearAsync();
