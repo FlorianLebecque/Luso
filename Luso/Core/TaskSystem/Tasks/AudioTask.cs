@@ -30,7 +30,11 @@ namespace Luso.Features.Rooms.Services
 
         public async Task StartAsync(Room room, CancellationToken cancellationToken)
         {
-            _audioAnalyser.Init();
+            await _audioAnalyser.InitAsync();
+
+            // If permission was denied, bail out silently rather than looping on a null recorder.
+            if (!_audioAnalyser.IsReady)
+                return;
 
             try
             {

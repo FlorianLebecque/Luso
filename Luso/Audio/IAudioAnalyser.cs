@@ -6,9 +6,11 @@ using System.Threading.Tasks;
 
 namespace Luso.Audio
 {
-    interface IAudioAnalyser{
+    interface IAudioAnalyser
+    {
 
-        void Init();
+        Task InitAsync();
+        bool IsReady { get; }
 
         double GetHighLevel();
         double GetMidLevel();

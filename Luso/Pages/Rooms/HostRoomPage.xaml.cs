@@ -115,8 +115,23 @@ public partial class HostRoomPage : ContentPage
         _orchestrator.Stop(TargetKind.Screen);
     }
 
-    private void OnMicToggled(object sender, EventArgs e)
+    private async void OnMicToggled(object sender, EventArgs e)
     {
+        // When turning on, verify / request mic permission before proceeding.
+        if (!_micActive)
+        {
+            var status = await Permissions.CheckStatusAsync<Permissions.Microphone>();
+            if (status != PermissionStatus.Granted)
+                status = await Permissions.RequestAsync<Permissions.Microphone>();
+
+            if (status != PermissionStatus.Granted)
+            {
+                await DisplayAlert("Microphone required",
+                    "Grant microphone access in Settings to use the mic mode.", "OK");
+                return; // leave _micActive = false, button stays inactive
+            }
+        }
+
         _micActive = !_micActive;
 
         if (_micActive)

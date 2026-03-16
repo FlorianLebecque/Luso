@@ -3,29 +3,33 @@ using NAudio.Wave;
 using System.Numerics;
 using System.Text.RegularExpressions;
 
-namespace Luso.Audio {
+namespace Luso.Audio
+{
     public class AudioAnalyser : FourierAnalysis, IAudioAnalyser
     {
 
 
 
-        public void Init() {
+        private bool _isReady;
+        public bool IsReady => _isReady;
+
+        public Task InitAsync()
+        {
             var deviceEnumerator = new MMDeviceEnumerator();
             var defaultCaptureDevice = deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia);
-            
 
             var capture = new WasapiCapture(defaultCaptureDevice);
-                        
 
             capture.DataAvailable += AnalyseSound;
-
             capture.StartRecording();
-
+            _isReady = true;
+            return Task.CompletedTask;
         }
 
 
-        private void AnalyseSound(Object sender, WaveInEventArgs e){
-            
+        private void AnalyseSound(Object sender, WaveInEventArgs e)
+        {
+
             float[] buffer = new float[e.Buffer.Length / 4]; // Assuming 32-bit audio
 
             for (int i = 0; i < buffer.Length; i++)
@@ -45,17 +49,20 @@ namespace Luso.Audio {
             GetVolume(complexBuffer, ((WasapiCapture)sender).WaveFormat.SampleRate);
         }
 
-        
 
-        public double GetHighLevel() {
+
+        public double GetHighLevel()
+        {
             return highLevel;
         }
 
-        public double GetMidLevel() {
+        public double GetMidLevel()
+        {
             return midLevel;
         }
 
-        public double GetLowLevel() {
+        public double GetLowLevel()
+        {
             return lowLevel;
         }
     }

@@ -12,7 +12,8 @@ using System.Threading.Tasks;
 
 namespace Luso.Audio
 {
-    public class AudioAnalyser : FourierAnalysis,IAudioAnalyser {
+    public class AudioAnalyser : FourierAnalysis, IAudioAnalyser
+    {
 
         private bool micOk = false;
 
@@ -28,28 +29,36 @@ namespace Luso.Audio
 
         private readonly Thread th;
 
-        public AudioAnalyser() {
+        public AudioAnalyser()
+        {
 
             th = new Thread(RecordThread);
 
         }
 
 
-        public async void Init() {
-            PermissionStatus micPermision = await Permissions.CheckStatusAsync<Permissions.Microphone>();
+        public async Task InitAsync()
+        {
+            // Permission dialogs must run on the main/UI thread.
+            PermissionStatus micPermision = await MainThread.InvokeOnMainThreadAsync(
+                async () =>
+                {
+                    var status = await Permissions.CheckStatusAsync<Permissions.Microphone>();
+                    if (status != PermissionStatus.Granted)
+                        status = await Permissions.RequestAsync<Permissions.Microphone>();
+                    return status;
+                });
 
-            if (micPermision != PermissionStatus.Granted) {
-                micPermision = await Permissions.RequestAsync<Permissions.Microphone>();
-            }
-
-            if (micPermision != PermissionStatus.Granted) {
+            if (micPermision != PermissionStatus.Granted)
+            {
                 micOk = false;
                 return;
             }
 
             audioRecord = new AudioRecord(AudioSource.Unprocessed, SampleRate, ChannelConfig, AudioFormat, BufferSize);
 
-            if (NoiseSuppressor.IsAvailable){
+            if (NoiseSuppressor.IsAvailable)
+            {
                 NoiseSuppressor.Create(audioRecord.AudioSessionId);
             }
 
@@ -58,21 +67,25 @@ namespace Luso.Audio
             th.Start();
         }
 
-        private void RecordThread() {
-            if (audioRecord.State == Android.Media.State.Initialized) {
+        private void RecordThread()
+        {
+            if (audioRecord.State == Android.Media.State.Initialized)
+            {
                 isRecording = true;
                 audioRecord.StartRecording();
 
                 byte[] buffer = new byte[BufferSize];
 
-                while (isRecording && micOk) {
+                while (isRecording && micOk)
+                {
                     audioRecord.Read(buffer, 0, BufferSize);
 
                     var complexBuffer = new Complex[buffer.Length / 2];
 
-                    for (int i = 0; i < complexBuffer.Length; i++){
+                    for (int i = 0; i < complexBuffer.Length; i++)
+                    {
                         double v = BitConverter.ToInt16(buffer, i * 2);
-                        complexBuffer[i] = new Complex( v/1000, 0.0);
+                        complexBuffer[i] = new Complex(v / 1000, 0.0);
                     }
 
                     GetVolume(complexBuffer, SampleRate);
@@ -80,15 +93,20 @@ namespace Luso.Audio
             }
         }
 
-        public double GetHighLevel(){
+        public bool IsReady => micOk;
+
+        public double GetHighLevel()
+        {
             return highLevel;
         }
 
-        public double GetMidLevel(){
+        public double GetMidLevel()
+        {
             return midLevel;
         }
 
-        public double GetLowLevel(){
+        public double GetLowLevel()
+        {
             return lowLevel;
         }
 
