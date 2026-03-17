@@ -27,41 +27,40 @@ public partial class HostRoomPage : ContentPage
     // Grid dimensions for auto-generated pages.
     private const int DeckCols = 3;
 
-    // DeckRows is computed at runtime from screen metrics (see ComputeDeckRows).
+    // DeckRows is computed at runtime from the rendered deck area.
     // Using a static fallback so BuildLayout always has a sane value even before
     // the first render pass.
     private int _deckRows = 3;
 
-    private static readonly int PageHorizontalPadding = 32;  // 16 + 16
-    private static readonly int CellGap = 8;
-    private static readonly int TabBarHeight = 52;  // DeckPageTabBar
-    private static readonly int BottomBarHeight = 68;  // BottomBarView
-    private static readonly int VerticalPadding = 8;   // top padding on page grid
-    private static readonly int RowSpacingBetween = 8;   // RowSpacing in page Grid
+    private const int CellGap = 8;
 
     /// <summary>
-    /// Computes how many 1:1 square rows fit in the available deck area, using the
+    /// Computes how many 1:1 square rows fit in the rendered deck area, using the
     /// same arithmetic as <c>DeckPadView.UpdateRowHeights()</c>.
     /// </summary>
-    private void RefreshDeckRows()
+    private bool RefreshDeckRowsFromDeckPad()
     {
-        var info = DeviceDisplay.Current.MainDisplayInfo;
-        double density = info.Density > 0 ? info.Density : 1.0;
-        double dpW = info.Width / density;
-        double dpH = info.Height / density;
+        if (deckPad.Width <= 0 || deckPad.Height <= 0)
+            return false;
 
-        double gridW = dpW - PageHorizontalPadding;
-        double cellSize = (gridW - CellGap * (DeckCols - 1)) / DeckCols;
-        if (cellSize <= 0) return;
+        double cellSize = (deckPad.Width - CellGap * (DeckCols - 1)) / DeckCols;
+        if (cellSize <= 0)
+            return false;
 
-        // Available height for the DeckPadView (row 1 = Star in the 3-row page layout).
-        double available = dpH
-            - VerticalPadding
-            - TabBarHeight - RowSpacingBetween
-            - BottomBarHeight;
+        int rows = (int)Math.Floor((deckPad.Height + CellGap) / (cellSize + CellGap));
+        int nextRows = Math.Max(2, rows);
+        if (nextRows == _deckRows)
+            return false;
 
-        int rows = (int)Math.Floor((available + CellGap) / (cellSize + CellGap));
-        _deckRows = Math.Max(2, rows);  // at least 2 rows
+        _deckRows = nextRows;
+        return true;
+    }
+
+    private void OnDeckPadSizeChanged(object? sender, EventArgs e)
+    {
+        if (!RefreshDeckRowsFromDeckPad()) return;
+        if (_session.Current is { } room)
+            BindDeck(room);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -93,8 +92,9 @@ public partial class HostRoomPage : ContentPage
         RoomNotifications.SetHostStatus(room.RoomName, _roster.Guests.Count);
 
         deckPad.Registry = _deckRegistry;
+        deckPad.SizeChanged += OnDeckPadSizeChanged;
         _activePageIndex = 0;
-        RefreshDeckRows();
+        RefreshDeckRowsFromDeckPad();
         BindDeck(room);
     }
 
@@ -103,6 +103,8 @@ public partial class HostRoomPage : ContentPage
         base.OnDisappearing();
 
         _orchestrator.StopAll();
+
+        deckPad.SizeChanged -= OnDeckPadSizeChanged;
 
         if (_session.Current is { } room)
         {
