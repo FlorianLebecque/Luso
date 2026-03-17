@@ -18,6 +18,12 @@
             "type": "maui",
             "request": "launch",
             "device": "ba6e5519"
+        },
+        {
+            "name": "Debug physical device (2)",
+            "type": "maui",
+            "request": "launch",
+            "device": "QXZHK2511026630"
         }
     ]
 }
