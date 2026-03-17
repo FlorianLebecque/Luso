@@ -26,7 +26,43 @@ public partial class HostRoomPage : ContentPage
 
     // Grid dimensions for auto-generated pages.
     private const int DeckCols = 3;
-    private const int DeckRows = 3; // 3×3 = 9 slots per page
+
+    // DeckRows is computed at runtime from screen metrics (see ComputeDeckRows).
+    // Using a static fallback so BuildLayout always has a sane value even before
+    // the first render pass.
+    private int _deckRows = 3;
+
+    private static readonly int PageHorizontalPadding = 32;  // 16 + 16
+    private static readonly int CellGap = 8;
+    private static readonly int TabBarHeight = 52;  // DeckPageTabBar
+    private static readonly int BottomBarHeight = 68;  // BottomBarView
+    private static readonly int VerticalPadding = 8;   // top padding on page grid
+    private static readonly int RowSpacingBetween = 8;   // RowSpacing in page Grid
+
+    /// <summary>
+    /// Computes how many 1:1 square rows fit in the available deck area, using the
+    /// same arithmetic as <c>DeckPadView.UpdateRowHeights()</c>.
+    /// </summary>
+    private void RefreshDeckRows()
+    {
+        var info = DeviceDisplay.Current.MainDisplayInfo;
+        double density = info.Density > 0 ? info.Density : 1.0;
+        double dpW = info.Width / density;
+        double dpH = info.Height / density;
+
+        double gridW = dpW - PageHorizontalPadding;
+        double cellSize = (gridW - CellGap * (DeckCols - 1)) / DeckCols;
+        if (cellSize <= 0) return;
+
+        // Available height for the DeckPadView (row 1 = Star in the 3-row page layout).
+        double available = dpH
+            - VerticalPadding
+            - TabBarHeight - RowSpacingBetween
+            - BottomBarHeight;
+
+        int rows = (int)Math.Floor((available + CellGap) / (cellSize + CellGap));
+        _deckRows = Math.Max(2, rows);  // at least 2 rows
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -58,6 +94,7 @@ public partial class HostRoomPage : ContentPage
 
         deckPad.Registry = _deckRegistry;
         _activePageIndex = 0;
+        RefreshDeckRows();
         BindDeck(room);
     }
 
@@ -91,8 +128,7 @@ public partial class HostRoomPage : ContentPage
         deckTabBar.ActivePage = activePage;
 
         var ctx = new DeckButtonContext { Room = room, Orchestrator = _orchestrator };
-        deckPad.Context = ctx;
-        deckPad.Page = activePage;
+        deckPad.Update(activePage, ctx);
         deckPad.ExtraButtons = null; // targets are now first-class deck buttons
     }
 
@@ -140,8 +176,8 @@ public partial class HostRoomPage : ContentPage
                 AddDevice(guest.DisplayName, device.DeviceId, device.Targets);
         }
 
-        // 2. Pack into pages of DeckRows × DeckCols.
-        int slotsPerPage = DeckRows * DeckCols;
+        // 2. Pack into pages of _deckRows × DeckCols.
+        int slotsPerPage = _deckRows * DeckCols;
         var layout = new DeckLayout { LayoutId = "host-runtime" };
         int pageIndex = 0;
 
@@ -150,7 +186,7 @@ public partial class HostRoomPage : ContentPage
             var page = new DeckPage
             {
                 Name = pageIndex == 0 ? room.RoomName : $"Page {pageIndex + 1}",
-                Rows = DeckRows,
+                Rows = _deckRows,
                 Cols = DeckCols,
             };
 
@@ -161,7 +197,7 @@ public partial class HostRoomPage : ContentPage
         }
 
         if (layout.Pages.Count == 0)
-            layout.Pages.Add(new DeckPage { Name = room.RoomName, Rows = DeckRows, Cols = DeckCols });
+            layout.Pages.Add(new DeckPage { Name = room.RoomName, Rows = _deckRows, Cols = DeckCols });
 
         return layout;
     }

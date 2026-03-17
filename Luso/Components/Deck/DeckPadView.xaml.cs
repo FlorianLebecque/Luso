@@ -16,6 +16,7 @@ namespace Luso.Shared.Components.Deck
     public partial class DeckPadView : ContentView
     {
         private bool _sizeHandlerAttached;
+        private bool _suppressRebuild;
 
         // ── Bindable properties ───────────────────────────────────────────────
 
@@ -66,6 +67,22 @@ namespace Luso.Shared.Components.Deck
             InitializeComponent();
         }
 
+        /// <summary>
+        /// Atomically sets <see cref="Page"/> and <see cref="Context"/> and calls
+        /// <see cref="Rebuild"/> exactly once. Use this instead of setting the two
+        /// properties separately to avoid the stale intermediate rebuild that would
+        /// otherwise fire when <see cref="Context"/> is set before the new
+        /// <see cref="Page"/> arrives.
+        /// </summary>
+        internal void Update(DeckPage page, DeckButtonContext? context)
+        {
+            _suppressRebuild = true;
+            Page = page;
+            Context = context;
+            _suppressRebuild = false;
+            Rebuild();
+        }
+
         // ── Square-cell sizing ────────────────────────────────────────────────
 
         /// <summary>
@@ -112,6 +129,7 @@ namespace Luso.Shared.Components.Deck
 
         private void Rebuild()
         {
+            if (_suppressRebuild) return;
             innerGrid.RowDefinitions.Clear();
             innerGrid.ColumnDefinitions.Clear();
             innerGrid.Children.Clear();
