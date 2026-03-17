@@ -128,16 +128,13 @@ namespace Luso.Features.Rooms.Networking.Ssp {
         private void HandleDatagram(UdpReceiveResult result) {
             try {
                 var msg = SspCbor.ParseMap(result.Buffer);
+                string remoteIp = result.RemoteEndPoint.Address.ToString();
                 switch (SspCbor.Tag(msg)) {
                     case "ANNC": {
-                        string ip = msg.TryGetValue("ip", out var ipObj) && ipObj is string s && s.Length > 0
-                            ? s
-                            : result.RemoteEndPoint.Address.ToString();
-
                         var announcement = new RoomAnnouncement(
                             RoomId:   (string)msg["id"]!,
                             RoomName: (string)msg["nm"]!,
-                            HostIp:   ip,
+                            HostIp:   remoteIp,
                             TcpPort:  (int)(ulong)msg["pt"]!
                         );
                         OnRoomDiscovered?.Invoke(this, announcement);
@@ -147,7 +144,7 @@ namespace Luso.Features.Rooms.Networking.Ssp {
                         var presence = new GuestPresenceAnnouncement(
                             GuestId: msg.TryGetValue("gid", out var gid) ? (string)gid! : string.Empty,
                             GuestName: msg.TryGetValue("nm", out var nm) ? (string)nm! : "Unknown",
-                            GuestIp: msg.TryGetValue("ip", out var gip) ? (string)gip! : result.RemoteEndPoint.Address.ToString(),
+                            GuestIp: remoteIp,
                             ProtocolVersion: msg.TryGetValue("pv", out var pv) ? (string)pv! : string.Empty,
                             Available: msg.TryGetValue("av", out var av) && av is bool b && b
                         );
@@ -159,7 +156,7 @@ namespace Luso.Features.Rooms.Networking.Ssp {
                             InviteId: msg.TryGetValue("iid", out var iid) ? (string)iid! : Guid.NewGuid().ToString("N"),
                             RoomId: (string)msg["id"]!,
                             RoomName: (string)msg["nm"]!,
-                            HostIp: msg.TryGetValue("ip", out var hip) ? (string)hip! : result.RemoteEndPoint.Address.ToString(),
+                            HostIp: remoteIp,
                             TcpPort: (int)(ulong)msg["pt"]!,
                             ProtocolVersion: msg.TryGetValue("pv", out var ipv) ? (string)ipv! : string.Empty
                         );
@@ -183,14 +180,30 @@ namespace Luso.Features.Rooms.Networking.Ssp {
         }
 
         private static string GetLocalIpAddress() {
-            foreach (NetworkInterface iface in NetworkInterface.GetAllNetworkInterfaces()) {
-                if (iface.OperationalStatus != OperationalStatus.Up) continue;
+            static bool IsPreferredLan(NetworkInterface iface)
+                => iface.NetworkInterfaceType is NetworkInterfaceType.Wireless80211 or NetworkInterfaceType.Ethernet;
+
+            static bool IsLikelyVirtual(NetworkInterface iface) {
+                string n = iface.Name.ToLowerInvariant();
+                string d = iface.Description.ToLowerInvariant();
+                return n.Contains("docker") || n.Contains("veth") || n.Contains("br-") || n.Contains("wg") ||
+                       d.Contains("docker") || d.Contains("hyper-v") || d.Contains("virtual") || d.Contains("vpn") || d.Contains("tunnel");
+            }
+
+            IEnumerable<NetworkInterface> ordered = NetworkInterface
+                .GetAllNetworkInterfaces()
+                .Where(iface => iface.OperationalStatus == OperationalStatus.Up)
+                .OrderByDescending(IsPreferredLan)
+                .ThenBy(iface => IsLikelyVirtual(iface));
+
+            foreach (NetworkInterface iface in ordered) {
                 foreach (UnicastIPAddressInformation ip in iface.GetIPProperties().UnicastAddresses) {
-                    if (ip.Address.AddressFamily == AddressFamily.InterNetwork &&
-                        !IPAddress.IsLoopback(ip.Address))
-                        return ip.Address.ToString();
+                    if (ip.Address.AddressFamily != AddressFamily.InterNetwork) continue;
+                    if (IPAddress.IsLoopback(ip.Address)) continue;
+                    return ip.Address.ToString();
                 }
             }
+
             return "127.0.0.1";
         }
 
