@@ -2,38 +2,35 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:components="clr-namespace:Luso.Shared.Components"
+             xmlns:deck="clr-namespace:Luso.Shared.Components.Deck"
              x:Class="Luso.Features.Rooms.Pages.HostRoomPage"
              Shell.NavBarIsVisible="False">
 
     <Shell.BackButtonBehavior>
         <BackButtonBehavior IsVisible="False"
-                IsEnabled="False"/>
+                            IsEnabled="False"/>
     </Shell.BackButtonBehavior>
 
     <Grid RowDefinitions="Auto,*,Auto"
-          Padding="16,48,16,0"
-          RowSpacing="12">
+          Padding="16,8,16,0"
+          RowSpacing="8">
 
-        <!-- Room name -->
-        <Label x:Name="lblRoomName"
-               Grid.Row="0"
-               Style="{StaticResource Title2}"
-               HorizontalOptions="Center"
-               HorizontalTextAlignment="Center"/>
+        <!-- Page tab strip -->
+        <deck:DeckPageTabBar x:Name="deckTabBar"
+                             Grid.Row="0"
+                             AllowAddPage="False"
+                             PageSelected="OnPageSelected"/>
 
-        <!-- Dynamic pad grid -->
-        <Grid x:Name="padGrid"
-                Grid.Row="1"
-                RowSpacing="8"
-                ColumnSpacing="8"
-              VerticalOptions="Fill"
-                HorizontalOptions="Fill"/>
+        <!-- Deck pad -->
+        <deck:DeckPadView x:Name="deckPad"
+                          Grid.Row="1"
+                          VerticalOptions="Fill"
+                          HorizontalOptions="Fill"/>
 
         <!-- Bottom action bar -->
         <components:BottomBarView Grid.Row="2">
             <Grid ColumnDefinitions="*,*,*"
-                    ColumnSpacing="8">
-
+                  ColumnSpacing="8">
                 <Button Grid.Column="0"
                         Text="Invite"
                         Clicked="OnInviteToolbarClicked"
@@ -43,7 +40,6 @@
                         FontAttributes="Bold"
                         CornerRadius="10"
                         HeightRequest="46"/>
-
                 <Button Grid.Column="1"
                         Text="Kick"
                         Clicked="OnKickToolbarClicked"
@@ -52,7 +48,6 @@
                         FontSize="14"
                         CornerRadius="10"
                         HeightRequest="46"/>
-
                 <Button Grid.Column="2"
                         Text="Close"
                         Clicked="OnLeaveClicked"

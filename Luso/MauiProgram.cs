@@ -10,6 +10,9 @@ using Luso.Features.Rooms.Pages;
 using Luso.Features.Rooms.Services;
 using Luso.Infrastructure;
 using Luso.Shared.Session;
+using Luso.Shared.Components.Deck;
+using Luso.Shared.Components.Deck.ButtonTypes;
+using Luso.Shared.Deck.Services;
 
 namespace Luso
 {
@@ -60,7 +63,7 @@ namespace Luso
 #endif
 
 #if DEBUG
-		builder.Logging.AddDebug();
+            builder.Logging.AddDebug();
 #endif
 
             var asm = Assembly.GetExecutingAssembly();
@@ -76,6 +79,9 @@ namespace Luso
             builder.Services.AddTransient<ITaskOrchestrator, TaskOrchestrator>();
             builder.Services.AddTransient<IGuestRosterService, GuestRosterService>();
 
+            builder.Services.AddSingleton<IDeckButtonRegistry, DeckButtonRegistry>();
+            builder.Services.AddSingleton<IDeckService, DeckService>();
+
             // Pages — Shell navigation resolves from DI when types are registered here
             builder.Services.AddTransient<HomePage>();
             builder.Services.AddTransient<CreateRoomPage>();
@@ -83,7 +89,16 @@ namespace Luso
             builder.Services.AddTransient<HostRoomPage>();
             builder.Services.AddTransient<GuestRoomPage>();
 
-            return builder.Build();
+            var app = builder.Build();
+
+            // Register all built-in deck button types.
+            var deckRegistry = app.Services.GetRequiredService<IDeckButtonRegistry>();
+            deckRegistry.Register(new StrobeButtonType());
+            deckRegistry.Register(new MicButtonType());
+            deckRegistry.Register(new AllFlashButtonType());
+            deckRegistry.Register(new TargetFlashButtonType());
+
+            return app;
         }
     }
 }

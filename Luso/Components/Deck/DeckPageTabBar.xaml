@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    DeckPageTabBar — horizontal scrollable tab strip for switching between DeckPages.
+
+    Usage:
+        <deck:DeckPageTabBar Layout="{Binding DeckLayout}"
+                             ActivePage="{Binding CurrentPage}"
+                             PageSelected="OnPageSelected"
+                             AddPageRequested="OnAddPageRequested" />
+-->
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Luso.Shared.Components.Deck.DeckPageTabBar">
+    <Grid ColumnDefinitions="*,Auto"
+          ColumnSpacing="4">
+
+        <!-- Page tabs -->
+        <ScrollView Grid.Column="0"
+                    Orientation="Horizontal"
+                    HorizontalScrollBarVisibility="Never">
+            <HorizontalStackLayout x:Name="tabHost"
+                                   Spacing="6"
+                                   VerticalOptions="Center"/>
+        </ScrollView>
+
+        <!-- Add page button -->
+        <Button Grid.Column="1"
+                x:Name="btnAdd"
+                Text="+"
+                FontSize="18"
+                FontAttributes="Bold"
+                BackgroundColor="#2A2A2A"
+                TextColor="#AAAAAA"
+                CornerRadius="10"
+                WidthRequest="40"
+                HeightRequest="36"
+                Clicked="OnAddClicked"/>
+    </Grid>
+</ContentView>

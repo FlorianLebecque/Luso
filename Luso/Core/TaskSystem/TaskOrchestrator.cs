@@ -57,6 +57,8 @@ namespace Luso.Features.Rooms.Services
                 Stop(kind);
         }
 
+        public bool IsRunning(TargetKind kind) => _running.ContainsKey(kind);
+
         public void Dispose() => StopAll();
     }
 }
