@@ -13,9 +13,11 @@ namespace Luso.Features.Rooms.Networking.Ssp
     /// goes from domain → target → SSP socket, with no protocol knowledge
     /// leaking above this layer.
     /// </summary>
-    internal sealed class SspRemoteTarget : ITarget
+    internal sealed class SspRemoteTarget : ITarget, IStrobeCapableTarget
     {
-        private readonly Func<FlashCommand, Task> _execute;
+        private readonly Func<TargetKind, FlashCommand, Task> _execute;
+        private readonly Func<TargetKind, long, int, int, double, Task> _startStrobe;
+        private readonly Func<TargetKind, Task> _stopStrobe;
 
         public string TargetId { get; }
         public TargetKind Kind { get; }
@@ -25,15 +27,25 @@ namespace Luso.Features.Rooms.Networking.Ssp
             string targetId,
             TargetKind kind,
             string displayName,
-            Func<FlashCommand, Task> execute)
+            Func<TargetKind, FlashCommand, Task> execute,
+            Func<TargetKind, long, int, int, double, Task> startStrobe,
+            Func<TargetKind, Task> stopStrobe)
         {
             TargetId = targetId;
             Kind = kind;
             DisplayName = displayName;
             _execute = execute;
+            _startStrobe = startStrobe;
+            _stopStrobe = stopStrobe;
         }
 
         public Task ExecuteAsync(FlashCommand command)
-            => _execute(command);
+            => _execute(Kind, command);
+
+        public Task StartStrobeAsync(long atUnixMs, int onMs, int offMs, double frequencyHz)
+            => _startStrobe(Kind, atUnixMs, onMs, offMs, frequencyHz);
+
+        public Task StopStrobeAsync()
+            => _stopStrobe(Kind);
     }
 }

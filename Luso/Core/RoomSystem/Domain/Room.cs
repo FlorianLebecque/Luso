@@ -118,7 +118,7 @@ namespace Luso.Features.Rooms.Domain
         public Task FlashAsync(FlashAction action = FlashAction.On, TargetKind kind = TargetKind.Flashlight)
         {
             if (!IsHost) throw new InvalidOperationException("Only the room host can trigger a flash.");
-            var cmd = new FlashCommand(action, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 50);
+            var cmd = new FlashCommand(action, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
             IEnumerable<IDevice> allDevices = _devices.Values;
             if (LocalDevice is not null)
@@ -141,7 +141,7 @@ namespace Luso.Features.Rooms.Domain
             else if (!_devices.TryGetValue(deviceId, out device))
                 return Task.CompletedTask;
 
-            var cmd = new FlashCommand(action, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 50);
+            var cmd = new FlashCommand(action, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             return Task.WhenAll(device.Targets
                 .Where(t => t.Kind == kind)
                 .Select(t => t.ExecuteAsync(cmd)));
@@ -161,7 +161,7 @@ namespace Luso.Features.Rooms.Domain
             var target = device.Targets.FirstOrDefault(t => t.TargetId == targetId);
             if (target is null) return Task.CompletedTask;
 
-            var cmd = new FlashCommand(action, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 50);
+            var cmd = new FlashCommand(action, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             return target.ExecuteAsync(cmd);
         }
 

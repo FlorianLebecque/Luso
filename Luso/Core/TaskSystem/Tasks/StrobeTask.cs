@@ -1,4 +1,5 @@
 #nullable enable
+using System.Diagnostics;
 using Luso.Features.Rooms.Domain;
 using Luso.Features.Rooms.Domain.Commands;
 using Luso.Features.Rooms.Domain.Targets;
@@ -27,15 +28,49 @@ namespace Luso.Features.Rooms.Services
         public async Task StartAsync(Room room, CancellationToken cancellationToken)
         {
             var halfPeriodMs = HalfPeriod(_frequencyHz);
+            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+            var targets = room.GetDevices()
+                .SelectMany(d => d.Targets)
+                .Where(t => t.Kind == Kind)
+                .ToList();
+
+            if (room.LocalDevice is not null)
+                targets.AddRange(room.LocalDevice.Targets.Where(t => t.Kind == Kind));
+
+            var native = targets.OfType<IStrobeCapableTarget>().ToList();
+            var fallback = targets.Except(native.Cast<ITarget>()).ToList();
+
+            foreach (var t in native)
+                await t.StartStrobeAsync(now, (int)halfPeriodMs, (int)halfPeriodMs, _frequencyHz);
 
             try
             {
-                bool state = false;
-                while (!cancellationToken.IsCancellationRequested)
+                if (fallback.Count > 0)
                 {
-                    state = !state;
-                    await room.FlashAsync(state ? FlashAction.On : FlashAction.Off, Kind);
-                    await Task.Delay((int)halfPeriodMs, cancellationToken).ConfigureAwait(false);
+                    var stopwatch = Stopwatch.StartNew();
+                    long nextTickMs = 0;
+                    bool state = false;
+
+                    while (!cancellationToken.IsCancellationRequested)
+                    {
+                        state = !state;
+
+                        var cmd = new FlashCommand(state ? FlashAction.On : FlashAction.Off,
+                            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                        await Task.WhenAll(fallback.Select(t => t.ExecuteAsync(cmd)));
+
+                        nextTickMs += halfPeriodMs;
+                        long delayMs = nextTickMs - stopwatch.ElapsedMilliseconds;
+                        if (delayMs > 0)
+                            await Task.Delay((int)delayMs, cancellationToken).ConfigureAwait(false);
+                        else if (delayMs < -halfPeriodMs)
+                            nextTickMs = stopwatch.ElapsedMilliseconds;
+                    }
+                }
+                else
+                {
+                    await Task.Delay(Timeout.Infinite, cancellationToken);
                 }
             }
             catch (OperationCanceledException)
@@ -44,7 +79,11 @@ namespace Luso.Features.Rooms.Services
             }
             finally
             {
-                await room.FlashAsync(FlashAction.Off, Kind);
+                foreach (var t in native)
+                    await t.StopStrobeAsync();
+
+                var offCmd = new FlashCommand(FlashAction.Off, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                await Task.WhenAll(targets.Select(t => t.ExecuteAsync(offCmd)));
             }
         }
 

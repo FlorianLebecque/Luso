@@ -33,6 +33,8 @@ namespace Luso.Features.Rooms.Networking.Ssp
         public bool IsConnected => _client.Connected;
 
         public event EventHandler<FlashCommand>? OnFlashCommand;
+        public event EventHandler<FlashCommand>? OnScreenCommand;
+        public event EventHandler<SspStrobeCommand>? OnStrobeCommand;
         public event EventHandler? OnDisconnected;
         public event EventHandler? OnKicked;
 
@@ -59,6 +61,7 @@ namespace Luso.Features.Rooms.Networking.Ssp
         {
 
             var client = new TcpClient();
+            client.NoDelay = true;
             using var connectCts = new CancellationTokenSource(timeoutMs);
             await client.ConnectAsync(room.HostIp, room.TcpPort, connectCts.Token);
 
@@ -151,6 +154,31 @@ namespace Luso.Features.Rooms.Networking.Ssp
                     }
                     break;
 
+                case "SCRN":
+                    if (msg.TryGetValue("ac", out var scrAc) && scrAc is string scrAction &&
+                        msg.TryGetValue("at", out var scrAt) && scrAt is ulong scrAtMs)
+                    {
+                        var fa = scrAction == "on" ? FlashAction.On : FlashAction.Off;
+                        OnScreenCommand?.Invoke(this, new FlashCommand(fa, (long)scrAtMs));
+                    }
+                    break;
+
+                case "STRB":
+                    if (msg.TryGetValue("at", out var stAt) &&
+                        msg.TryGetValue("on", out var stOn) &&
+                        msg.TryGetValue("off", out var stOff) &&
+                        msg.TryGetValue("fq", out var stFq))
+                    {
+                        long startAt = ToLong(stAt);
+                        int onMs = ToInt(stOn);
+                        int offMs = ToInt(stOff);
+                        int fqMilliHz = ToInt(stFq);
+                        double frequencyHz = Math.Max(0, fqMilliHz) / 1000.0;
+
+                        OnStrobeCommand?.Invoke(this, new SspStrobeCommand(startAt, onMs, offMs, frequencyHz));
+                    }
+                    break;
+
                 case "CLOS":
                     return true; // signal host-initiated close
 
@@ -161,6 +189,22 @@ namespace Luso.Features.Rooms.Networking.Ssp
             }
             return false;
         }
+
+        private static long ToLong(object? value) => value switch
+        {
+            ulong u => unchecked((long)u),
+            long l => l,
+            int i => i,
+            _ => 0
+        };
+
+        private static int ToInt(object? value) => value switch
+        {
+            ulong u => (int)u,
+            long l => (int)l,
+            int i => i,
+            _ => 0
+        };
 
         // ── Watchdog ──────────────────────────────────────────────────────────
 

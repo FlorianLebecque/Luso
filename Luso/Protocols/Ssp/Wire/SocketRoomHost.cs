@@ -22,7 +22,6 @@ namespace Luso.Features.Rooms.Networking.Ssp
         private const int PingIntervalMs = 2_000;
         private const int PingTimeoutMs = 6_000;
         private const int HandshakeTimeMs = 5_000;
-        private const int LeadMs = 500;
 
         // ── Per-guest state ───────────────────────────────────────────────────
 
@@ -90,7 +89,7 @@ namespace Luso.Features.Rooms.Networking.Ssp
         }
 
         /// <summary>Broadcasts a FLSH command to all connected guests.</summary>
-        public async Task FlashAsync(string action = "on", int leadMs = LeadMs)
+        public async Task FlashAsync(string action = "on", int leadMs = 0)
         {
             long atUnixMs = Now() + leadMs;
             byte[] bytes = SspCbor.Flsh(action, atUnixMs);
@@ -104,11 +103,28 @@ namespace Luso.Features.Rooms.Networking.Ssp
         }
 
         /// <summary>Sends a FLSH command to a single guest identified by IP.</summary>
-        public async Task FlashGuestAsync(string ip, string action = "on", int leadMs = LeadMs)
+        public async Task FlashGuestAsync(string ip, string action = "on", int leadMs = 0)
         {
             if (!_guests.TryGetValue(ip, out var state)) return;
             long atUnixMs = Now() + leadMs;
             byte[] bytes = SspCbor.Flsh(action, atUnixMs);
+            await SendAsync(ip, state, bytes);
+        }
+
+        /// <summary>Sends a screen-only flash command to a single guest.</summary>
+        public async Task FlashGuestScreenAsync(string ip, string action = "on", int leadMs = 0)
+        {
+            if (!_guests.TryGetValue(ip, out var state)) return;
+            long atUnixMs = Now() + leadMs;
+            byte[] bytes = SspCbor.Scrn(action, atUnixMs);
+            await SendAsync(ip, state, bytes);
+        }
+
+        /// <summary>Sends a strobe command to a single guest with timing parameters.</summary>
+        public async Task StrobeGuestAsync(string ip, long atUnixMs, int onMs, int offMs, double frequencyHz)
+        {
+            if (!_guests.TryGetValue(ip, out var state)) return;
+            byte[] bytes = SspCbor.Strb(atUnixMs, onMs, offMs, frequencyHz);
             await SendAsync(ip, state, bytes);
         }
 
@@ -133,6 +149,7 @@ namespace Luso.Features.Rooms.Networking.Ssp
                 }
 
                 string ip = ((IPEndPoint)client.Client.RemoteEndPoint!).Address.ToString();
+                client.NoDelay = true;
                 _ = HandshakeAndMonitorAsync(ip, client, token);
             }
         }

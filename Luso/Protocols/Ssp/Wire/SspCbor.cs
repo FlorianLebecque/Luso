@@ -131,6 +131,32 @@ namespace Luso.Features.Rooms.Networking.Ssp {
             return w.Encode();
         }
 
+        /// <summary>SCRN — Scheduled screen-only effect command (H→G).</summary>
+        public static byte[] Scrn(string action, long atUnixMs) {
+            var w = new CborWriter();
+            w.WriteStartMap(3);
+            w.WriteTextString("t");  w.WriteTextString("SCRN");
+            w.WriteTextString("ac"); w.WriteTextString(action);
+            w.WriteTextString("at"); w.WriteUInt64((ulong)atUnixMs);
+            w.WriteEndMap();
+            return w.Encode();
+        }
+
+        /// <summary>STRB — Scheduled strobe command (H→G).</summary>
+        public static byte[] Strb(long atUnixMs, int onMs, int offMs, double frequencyHz) {
+            int fqMilliHz = (int)Math.Max(0, Math.Round(frequencyHz * 1000.0));
+
+            var w = new CborWriter();
+            w.WriteStartMap(5);
+            w.WriteTextString("t");  w.WriteTextString("STRB");
+            w.WriteTextString("at"); w.WriteUInt64((ulong)Math.Max(0, atUnixMs));
+            w.WriteTextString("on"); w.WriteUInt32((uint)Math.Max(0, onMs));
+            w.WriteTextString("off"); w.WriteUInt32((uint)Math.Max(0, offMs));
+            w.WriteTextString("fq"); w.WriteUInt32((uint)fqMilliHz);
+            w.WriteEndMap();
+            return w.Encode();
+        }
+
         /// <summary>CLOS — Host gracefully closes room (H→G all guests).</summary>
         public static byte[] Clos() {
             var w = new CborWriter();

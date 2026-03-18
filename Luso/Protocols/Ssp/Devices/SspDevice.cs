@@ -39,13 +39,15 @@ namespace Luso.Features.Rooms.Networking.Ssp
 
         internal SspDevice(
             string ip, string name, GuestCapabilities capabilities,
-            Func<FlashCommand, Task> flashGuest,
+            Func<TargetKind, FlashCommand, Task> flashGuest,
+            Func<TargetKind, long, int, int, double, Task> startStrobe,
+            Func<TargetKind, Task> stopStrobe,
             Func<Task<bool>> disconnectSelf)
         {
             DeviceId = ip;
             DeviceName = name;
             _disconnectSelf = disconnectSelf;
-            Targets = BuildTargets(capabilities, flashGuest);
+            Targets = BuildTargets(capabilities, flashGuest, startStrobe, stopStrobe);
             _status = DeviceStatus.Ready;
         }
 
@@ -69,24 +71,32 @@ namespace Luso.Features.Rooms.Networking.Ssp
 
         private static IReadOnlyList<ITarget> BuildTargets(
             GuestCapabilities caps,
-            Func<FlashCommand, Task> flashGuest)
+            Func<TargetKind, FlashCommand, Task> flashGuest,
+            Func<TargetKind, long, int, int, double, Task> startStrobe,
+            Func<TargetKind, Task> stopStrobe)
         {
             var targets = new List<ITarget>(3);
 
             if (caps.HasFlashlight)
                 targets.Add(new SspRemoteTarget(
                     "flashlight", TargetKind.Flashlight, "Flashlight",
-                    cmd => flashGuest(cmd)));
+                    (kind, cmd) => flashGuest(kind, cmd),
+                    (kind, at, on, off, fq) => startStrobe(kind, at, on, off, fq),
+                    kind => stopStrobe(kind)));
 
             if (caps.HasScreen)
                 targets.Add(new SspRemoteTarget(
                     "screen", TargetKind.Screen, "Screen",
-                    cmd => flashGuest(cmd)));
+                    (kind, cmd) => flashGuest(kind, cmd),
+                    (kind, at, on, off, fq) => startStrobe(kind, at, on, off, fq),
+                    kind => stopStrobe(kind)));
 
             if (caps.HasVibration)
                 targets.Add(new SspRemoteTarget(
                     "vibration", TargetKind.Vibration, "Vibration",
-                    cmd => flashGuest(cmd)));
+                    (kind, cmd) => flashGuest(kind, cmd),
+                    (kind, at, on, off, fq) => startStrobe(kind, at, on, off, fq),
+                    kind => stopStrobe(kind)));
 
             return targets.AsReadOnly();
         }

@@ -1,6 +1,7 @@
 #nullable enable
 using System.Collections.Concurrent;
 using Luso.Features.Rooms.Domain.Devices;
+using Luso.Features.Rooms.Domain.Targets;
 using Luso.Features.Rooms.Domain.Technologies;
 
 namespace Luso.Features.Rooms.Networking.Ssp
@@ -43,7 +44,21 @@ namespace Luso.Features.Rooms.Networking.Ssp
                 var ip = args.Ip;
                 var device = new SspDevice(
                     ip, args.Name, args.Capabilities,
-                    flashGuest: cmd => _host.FlashGuestAsync(ip, cmd.Action == FlashAction.On ? "on" : "off"),
+                    flashGuest: (kind, cmd) => kind switch
+                    {
+                        TargetKind.Screen => _host.FlashGuestScreenAsync(ip, cmd.Action == FlashAction.On ? "on" : "off"),
+                        _ => _host.FlashGuestAsync(ip, cmd.Action == FlashAction.On ? "on" : "off")
+                    },
+                    startStrobe: (kind, at, on, off, fq) => kind switch
+                    {
+                        TargetKind.Flashlight => _host.StrobeGuestAsync(ip, at, on, off, fq),
+                        _ => Task.CompletedTask
+                    },
+                    stopStrobe: kind => kind switch
+                    {
+                        TargetKind.Screen => _host.FlashGuestScreenAsync(ip, "off"),
+                        _ => _host.FlashGuestAsync(ip, "off")
+                    },
                     disconnectSelf: () => _host.KickGuestAsync(ip));
                 _devices[ip] = device;
                 OnGuestConnected?.Invoke(this, device);
